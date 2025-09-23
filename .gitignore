@@ -1,0 +1,83 @@
+# Python virtual environment# Python virtual environment
+
+.venv/.venv/
+
+venv/venv/
+
+ENV/ENV/
+
+legalbert/legalbert_env/
+
+# Python cache files.env
+
+__pycache__/
+
+*.py[cod]# Python cache files
+
+*$py.class__pycache__/
+
+*.py[cod]
+
+# Distribution / packaging*$py.class
+
+dist/
+
+build/# Distribution / packaging
+
+*.egg-info/dist/
+
+build/
+
+# IDE specific files*.egg-info/
+
+.vscode/
+
+.idea/# PDF files
+
+*.swp*.pdf
+
+*.swo
+
+# IDE specific files
+
+# OS specific files.vscode/
+
+.DS_Store.idea/
+
+Thumbs.db*.swp
+
+*.swo
+
+# PDF files
+
+*.pdf# OS specific files
+
+.DS_Store
+
+# Jupyter NotebookThumbs.db
+
+.ipynb_checkpoints
+
+# Jupyter Notebook
+
+# Logs and databases.ipynb_checkpoints
+
+*.log
+
+*.sqlite# Logs and databases
+
+*.db*.log
+
+*.sqlite
+
+# Environment variables*.db
+
+.env
+
+.env.*# Environment variables
+
+.env
+
+# Executables.env.*
+
+*.exe*.exe

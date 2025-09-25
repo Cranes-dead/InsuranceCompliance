@@ -1,0 +1,38 @@
+
+
+User uploads claim rejection letter
+System analyzes against IRDAI guidelines
+Identifies compliance violations
+Provides legal backing for dispute
+Suggests next steps
+
+Use Case 3: Insurance Company Compliance Audit
+Scenario: Bulk policy compliance checking
+Demo Flow:
+
+Upload multiple policies
+Batch compliance analysis
+Generate compliance report
+Highlight violations with explanations
+Export detailed audit report
+
+5. Technical Implementation Details
+Data Pipeline Architecture:
+IRDAI Website → Web Scraper → PDF Parser → Text Processor → 
+Legal BERT Fine-tuning → Compliance Classifier → 
+Ollama Integration → Explanation Generator → 
+API Layer → Frontend Interface
+Model Training Strategy:
+
+Legal BERT Fine-tuning:
+
+Classification labels: COMPLIANT, NON_COMPLIANT, REQUIRES_REVIEW
+Context-aware regulation matching
+Multi-label classification for complex scenarios
+
+
+Ollama Integration:
+
+Prompt engineering for explanation generation
+Context injection from Legal BERT decisions
+Human-readable formatting

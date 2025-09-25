@@ -34,21 +34,21 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class ComplianceDocumentScraper:
+class MotorVehicleComplianceDocumentScraper:
     def __init__(self, base_dir=None):
         # Fix constructor logic - use provided base_dir or default
         if base_dir:
             self.base_dir = Path(base_dir)
         else:
-            self.base_dir = Path("D:/compliance_scraper")
+            self.base_dir = Path("D:/motor_compliance_scraper")
         
         # Ensure directory exists
         if not self.base_dir.exists():
             self.base_dir.mkdir(parents=True, exist_ok=True)
         
-        self.pdf_dir = self.base_dir / "scraped_pdfs"
-        self.processed_urls_file = self.base_dir / "processed_urls.txt"
-        self.csv_file = self.base_dir / "compliance_documents.csv"
+        self.pdf_dir = self.base_dir / "motor_insurance_pdfs"
+        self.processed_urls_file = self.base_dir / "processed_motor_urls.txt"
+        self.csv_file = self.base_dir / "motor_vehicle_compliance_documents.csv"
         self.processed_urls = set()
         
         # File size limit (50MB)
@@ -89,12 +89,33 @@ class ComplianceDocumentScraper:
         
         self.session.headers.update(self.headers)
         
-        # Website configurations
+        # Website configurations - Motor Vehicle Insurance focused URLs
         self.sites = {
-            "IRDAI": "https://www.irdai.gov.in/ADMINCMS/cms/NormalData_Layout.aspx?page=PageNo247&mid=3.4.1",
+            # IRDAI Motor Insurance specific pages
+            "IRDAI_MOTOR": "https://www.irdai.gov.in/ADMINCMS/cms/NormalData_Layout.aspx?page=PageNo247&mid=3.4.1",
+            "IRDAI_GUIDELINES": "https://www.irdai.gov.in/guidelines/motor-insurance",
+            "IRDAI_TARIFF": "https://www.irdai.gov.in/motor-third-party-tariff",
+            
+            # MoRTH Vehicle Insurance Rules
+            "MoRTH_MOTOR": "https://morth.nic.in/motor-vehicle-act",
+            "MoRTH_INSURANCE": "https://morth.nic.in/insurance-provisions",
             "MoRTH": "https://morth.nic.in",
+            
+            # General Insurance Council - Motor specific
+            "GIC_MOTOR": "https://www.gicre.in/en/motor-insurance",
             "GIC": "https://www.gicre.in/en//"
         }
+        
+        # Motor Vehicle Insurance specific keywords for document filtering
+        self.motor_keywords = [
+            'motor insurance', 'vehicle insurance', 'third party', 'motor vehicle',
+            'third party liability', 'motor tariff', 'vehicle coverage',
+            'two wheeler', 'four wheeler', 'commercial vehicle', 'private car',
+            'motor third party', 'vehicle act', 'compulsory insurance',
+            'motor policy', 'vehicle policy', 'automobile insurance',
+            'motor coverage', 'vehicular insurance', 'tp liability',
+            'own damage', 'comprehensive motor', 'motor claim'
+        ]
         
         # Date patterns for better extraction
         self.date_patterns = [
@@ -255,9 +276,9 @@ class ComplianceDocumentScraper:
             if not self.csv_file.exists():
                 with open(self.csv_file, 'w', newline='', encoding='utf-8') as f:
                     writer = csv.writer(f)
-                    writer.writerow(['source', 'title', 'publication_date', 'pdf_url', 'local_path', 'extracted_text', 'language'])
+                    writer.writerow(['source', 'title', 'publication_date', 'pdf_url', 'local_path', 'extracted_text', 'language', 'motor_vehicle_relevance'])
             
-            logger.info(f"Environment setup complete. {len(self.processed_urls)} URLs already processed.")
+            logger.info(f"Motor Vehicle Compliance environment setup complete. {len(self.processed_urls)} URLs already processed.")
             
         except Exception as e:
             logger.error(f"Error setting up environment: {e}")
@@ -386,8 +407,9 @@ class ComplianceDocumentScraper:
         return False
 
     def find_pdf_links(self):
-        """Find all PDF links on the current page using Selenium"""
+        """Find all PDF links on the current page using Selenium with motor vehicle insurance focus"""
         pdf_links = []
+        motor_pdf_links = []
         
         try:
             # Find all anchor tags
@@ -397,30 +419,71 @@ class ComplianceDocumentScraper:
                 try:
                     href = link.get_attribute("href")
                     text = link.text.strip()
+                    parent_text = self.get_parent_text(link)
+                    combined_text = f"{text} {parent_text}".lower()
                     
                     if href and self.is_pdf_url(href):
                         # Get absolute URL
                         absolute_url = urljoin(self.driver.current_url, href)
                         
                         if absolute_url not in self.processed_urls:
-                            pdf_links.append({
+                            link_data = {
                                 'element': link,
                                 'url': absolute_url,
                                 'text': text,
-                                'parent_text': self.get_parent_text(link)
-                            })
+                                'parent_text': parent_text
+                            }
+                            
+                            pdf_links.append(link_data)
+                            
+                            # Check if this PDF is related to motor vehicle insurance
+                            if self.is_motor_vehicle_related(combined_text):
+                                motor_pdf_links.append(link_data)
+                                logger.info(f"🚗 Motor vehicle PDF found: {text[:50]}...")
                             
                 except Exception as e:
                     logger.warning(f"Error processing link: {e}")
                     continue
             
-            logger.info(f"Found {len(pdf_links)} PDF links on current page")
-            return pdf_links
+            # Prioritize motor vehicle related PDFs
+            if motor_pdf_links:
+                logger.info(f"🎯 Found {len(motor_pdf_links)} MOTOR VEHICLE related PDFs out of {len(pdf_links)} total PDFs")
+                return motor_pdf_links
+            else:
+                logger.info(f"Found {len(pdf_links)} PDF links (no motor vehicle specific filters matched)")
+                return pdf_links
             
         except Exception as e:
             logger.error(f"Error finding PDF links: {e}")
             self.stats['selenium_errors'] += 1
             return []
+
+    def is_motor_vehicle_related(self, text):
+        """Check if text content is related to motor vehicle insurance"""
+        text_lower = text.lower()
+        
+        # Check for motor vehicle insurance keywords
+        for keyword in self.motor_keywords:
+            if keyword.lower() in text_lower:
+                return True
+        
+        # Additional patterns for motor vehicle insurance
+        motor_patterns = [
+            r'motor.*insurance',
+            r'vehicle.*insurance', 
+            r'third.*party.*liability',
+            r'tp.*tariff',
+            r'motor.*tariff',
+            r'automobile.*insurance',
+            r'vehicular.*coverage',
+            r'compulsory.*insurance'
+        ]
+        
+        for pattern in motor_patterns:
+            if re.search(pattern, text_lower):
+                return True
+        
+        return False
 
     def get_parent_text(self, element):
         """Get text from parent elements for date extraction"""
@@ -586,6 +649,9 @@ class ComplianceDocumentScraper:
                 data['extracted_text'] = data['extracted_text'][:32760] + "..."
                 logger.warning(f"Truncated extracted text for {data['title']}")
             
+            # Check if document is motor vehicle related
+            motor_relevance = "HIGH" if self.is_motor_vehicle_related(f"{data['title']} {data['extracted_text']}") else "LOW"
+            
             with open(self.csv_file, 'a', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
@@ -595,10 +661,11 @@ class ComplianceDocumentScraper:
                     data['pdf_url'],
                     data['local_path'],
                     data['extracted_text'],
-                    detected_language
+                    detected_language,
+                    motor_relevance
                 ])
             
-            logger.info(f"Saved document with language: {detected_language}")
+            logger.info(f"Saved motor vehicle document (relevance: {motor_relevance}) with language: {detected_language}")
             
         except Exception as e:
             logger.error(f"Error saving to CSV: {e}")
@@ -718,16 +785,23 @@ class ComplianceDocumentScraper:
         except Exception as e:
             logger.error(f"Error processing PDF link {link_data['url']}: {e}")
 
-    def scrape_irdai(self):
-        """Scrape IRDAI circulars using Selenium"""
-        self.scrape_site_with_selenium("IRDAI", self.sites["IRDAI"])
+    def scrape_irdai_motor(self):
+        """Scrape IRDAI motor insurance circulars using Selenium"""
+        self.scrape_site_with_selenium("IRDAI_MOTOR", self.sites["IRDAI_MOTOR"])
+        # Also try specific motor insurance pages
+        if "IRDAI_GUIDELINES" in self.sites:
+            self.scrape_site_with_selenium("IRDAI_GUIDELINES", self.sites["IRDAI_GUIDELINES"])
 
-    def scrape_morth(self):
-        """Scrape MoRTH notifications using Selenium"""
+    def scrape_morth_motor(self):
+        """Scrape MoRTH motor vehicle insurance notifications using Selenium"""
+        self.scrape_site_with_selenium("MoRTH_MOTOR", self.sites["MoRTH_MOTOR"])
+        # Also try general MoRTH page
         self.scrape_site_with_selenium("MoRTH", self.sites["MoRTH"])
 
-    def scrape_gic(self):
-        """Scrape General Insurance Council circulars using Selenium"""
+    def scrape_gic_motor(self):
+        """Scrape General Insurance Council motor insurance circulars using Selenium"""
+        self.scrape_site_with_selenium("GIC_MOTOR", self.sites["GIC_MOTOR"])
+        # Also try general GIC page  
         self.scrape_site_with_selenium("GIC", self.sites["GIC"])
 
     def print_statistics(self):
@@ -786,39 +860,44 @@ class ComplianceDocumentScraper:
     def run(self):
         """Main execution function with improved error handling"""
         start_time = datetime.now()
-        logger.info("Starting compliance document scraping with Selenium...")
+        logger.info("Starting Motor Vehicle Insurance compliance document scraping with Selenium...")
         
         try:
             # Setup environment
             self.setup_environment()
             
-            # Scrape each site
-            self.scrape_irdai()
-            self.scrape_morth()
-            self.scrape_gic()
+            # Scrape each motor vehicle insurance focused site
+            logger.info("🚗 Scraping IRDAI Motor Insurance regulations...")
+            self.scrape_irdai_motor()
+            
+            logger.info("🚗 Scraping MoRTH Vehicle Insurance rules...")
+            self.scrape_morth_motor()
+            
+            logger.info("🚗 Scraping GIC Motor Insurance guidelines...")
+            self.scrape_gic_motor()
             
             # Print statistics
             self.print_statistics()
             
         except KeyboardInterrupt:
-            logger.info("Scraping interrupted by user")
+            logger.info("Motor Vehicle Insurance scraping interrupted by user")
         except Exception as e:
-            logger.error(f"Critical error during scraping: {e}")
+            logger.error(f"Critical error during motor vehicle insurance scraping: {e}")
         finally:
             # Cleanup resources
             self.cleanup()
             
             end_time = datetime.now()
             duration = end_time - start_time
-            logger.info(f"Scraping completed in {duration}")
+            logger.info(f"Motor Vehicle Insurance scraping completed in {duration}")
 
 def main():
     """Main function with context manager"""
     try:
-        with ComplianceDocumentScraper() as scraper:
+        with MotorVehicleComplianceDocumentScraper() as scraper:
             scraper.run()
     except Exception as e:
-        logger.error(f"Failed to initialize scraper: {e}")
+        logger.error(f"Failed to initialize motor vehicle compliance scraper: {e}")
 
 if __name__ == "__main__":
     main()

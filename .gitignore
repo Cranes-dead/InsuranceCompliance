@@ -1,83 +1,89 @@
-# Python virtual environment# Python virtual environment
+# Python Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+legalbert/
+legalbert_env/
 
-.venv/.venv/
-
-venv/venv/
-
-ENV/ENV/
-
-legalbert/legalbert_env/
-
-# Python cache files.env
-
+# Python Cache Files
 __pycache__/
-
-*.py[cod]# Python cache files
-
-*$py.class__pycache__/
-
 *.py[cod]
+*$py.class
+*.so
 
-# Distribution / packaging*$py.class
-
+# Distribution / Packaging
 dist/
-
-build/# Distribution / packaging
-
-*.egg-info/dist/
-
 build/
+*.egg-info/
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 
-# IDE specific files*.egg-info/
-
+# IDE Specific Files
 .vscode/
-
-.idea/# PDF files
-
-*.swp*.pdf
-
+.idea/
+*.swp
 *.swo
+*.sublime-project
+*.sublime-workspace
 
-# IDE specific files
-
-# OS specific files.vscode/
-
-.DS_Store.idea/
-
-Thumbs.db*.swp
-
-*.swo
-
-# PDF files
-
-*.pdf# OS specific files
-
+# OS Specific Files
 .DS_Store
-
-# Jupyter NotebookThumbs.db
-
-.ipynb_checkpoints
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # Jupyter Notebook
+.ipynb_checkpoints
 
-# Logs and databases.ipynb_checkpoints
+# Environment Variables
+.env
+.env.*
 
+# Logs and Databases
 *.log
-
-*.sqlite# Logs and databases
-
-*.db*.log
-
+logs/
 *.sqlite
+*.db
 
-# Environment variables*.db
+# Model Files (Large Files)
+models/legal_bert_compliance/model.safetensors
+models/legal_bert_compliance/pytorch_model.bin
+*.bin
+*.safetensors
 
-.env
+# Data Files (Keep structure, ignore large files)
+data/uploads/*.pdf
+data/raw/*
+data/processed/*
 
-.env.*# Environment variables
-
-.env
-
-# Executables.env.*
-
+# Executables
 *.exe
+*.msi
+
+# Test Output Files
+test_results/
+coverage/
+.coverage
+.pytest_cache/
+
+# Temporary Files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# System Files
+desktop.ini

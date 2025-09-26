@@ -5,6 +5,15 @@ import asyncio
 import uuid
 from datetime import datetime
 from pathlib import Path
+import sys
+import os
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.append(str(project_root))
+
+from updated_compliance_system import RuleBasedComplianceEngine
+from src.processing.parsers.document_parser import parse_document
 
 from ..models.schemas import (
     ComplianceAnalysisRequest,
@@ -19,51 +28,106 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
+# Initialize the rule-based compliance engine
+try:
+    compliance_engine = RuleBasedComplianceEngine()
+    logger.info("Rule-based compliance engine initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize compliance engine: {e}")
+    compliance_engine = None
+
 # In-memory storage for batch jobs (in production, use Redis or database)
 batch_jobs: Dict[str, Dict] = {}
 
-# Simulated processing (replace with actual ML inference)
+# Updated document analysis using rule-based system
 async def analyze_document(document_id: str, analysis_type: str = "full") -> ComplianceAnalysisResponse:
-    """Analyze a single document for compliance"""
+    """Analyze a single document for compliance using rule-based engine"""
     try:
-        # TODO: Load document from storage
-        # TODO: Run through Legal BERT model
-        # TODO: Generate explanations with Ollama
-        # TODO: Extract violations and recommendations
+        if not compliance_engine:
+            raise HTTPException(status_code=503, detail="Compliance engine not available")
         
-        # Simulated processing time
-        await asyncio.sleep(2)
+        # Load document from storage
+        upload_dir = Path("./data/uploads")
+        document_files = list(upload_dir.glob(f"{document_id}.*"))
         
-        # Mock results for demonstration
-        violations = [
-            ViolationDetail(
-                type="REGULATION_BREACH",
-                description="Policy terms do not comply with IRDAI circular XYZ-2023",
-                severity="HIGH",
-                regulation_reference="IRDAI/REG/2023/001",
-                suggested_fix="Update policy wording to align with regulatory requirements"
-            )
-        ]
+        if not document_files:
+            raise HTTPException(status_code=404, detail="Document not found")
         
-        recommendations = [
-            "Review and update policy terms to ensure IRDAI compliance",
-            "Consult with legal team for regulatory interpretation",
-            "Implement regular compliance audits"
-        ]
+        document_path = document_files[0]
         
-        explanation = "This document has been classified as non-compliant due to several regulatory violations..."
+        # Parse document content
+        try:
+            document_text = parse_document(str(document_path))
+        except Exception as e:
+            logger.error(f"Failed to parse document {document_id}: {e}")
+            raise HTTPException(status_code=422, detail="Failed to parse document")
+        
+        # Perform rule-based compliance analysis
+        start_time = datetime.utcnow()
+        analysis_result = compliance_engine.classify_policy_text(document_text)
+        end_time = datetime.utcnow()
+        processing_time = (end_time - start_time).total_seconds()
+        
+        # Convert analysis result to API response format
+        classification = ComplianceClassification(analysis_result['classification'])
+        
+        # Convert violations to ViolationDetail objects
+        violations = []
+        for violation in analysis_result.get('violations', []):
+            violations.append(ViolationDetail(
+                type=violation.get('type', 'REGULATORY_VIOLATION'),
+                description=violation.get('description', ''),
+                severity=violation.get('severity', 'MEDIUM').upper(),
+                regulation_reference="IRDAI Motor Insurance Regulations",
+                suggested_fix=violation.get('description', '')
+            ))
+        
+        # Add violations for failed mandatory requirements
+        for req in analysis_result.get('mandatory_compliance', []):
+            if not req.get('compliant', True):
+                violations.append(ViolationDetail(
+                    type="MANDATORY_REQUIREMENT_FAILURE",
+                    description=f"Failed requirement: {req.get('rule', 'Unknown requirement')}",
+                    severity="HIGH",
+                    regulation_reference="IRDAI Motor Insurance Regulations / Motor Vehicle Act 1988",
+                    suggested_fix=req.get('issue', 'Ensure compliance with mandatory requirement')
+                ))
+        
+        # Generate detailed explanation
+        explanation = f"""
+        Policy Classification: {analysis_result['classification']}
+        Compliance Score: {analysis_result['compliance_score']:.2f}
+        
+        Analysis Summary:
+        - Classification determined using rule-based regulatory analysis
+        - Regulatory rules classified by type (Mandatory, Optional, Procedural, etc.)
+        - Policy checked against extracted regulatory requirements
+        
+        Mandatory Requirements Status:
+        """
+        
+        for req in analysis_result.get('mandatory_compliance', []):
+            status = "✅ PASSED" if req.get('compliant', False) else "❌ FAILED"
+            explanation += f"\n        • {status}: {req.get('rule', 'Unknown requirement')}"
+            if req.get('found_amount') and req.get('required_amount'):
+                explanation += f" (Found: Rs {req['found_amount']/100000:.0f}L, Required: Rs {req['required_amount']/100000:.0f}L)"
+        
+        if analysis_result.get('violations'):
+            explanation += f"\n\n        Regulatory Violations Detected: {len(analysis_result['violations'])}"
         
         return ComplianceAnalysisResponse(
             document_id=document_id,
-            classification=ComplianceClassification.NON_COMPLIANT,
-            confidence=0.87,
+            classification=classification,
+            confidence=analysis_result['confidence'],
             violations=violations,
-            recommendations=recommendations,
-            explanation=explanation,
+            recommendations=analysis_result.get('recommendations', []),
+            explanation=explanation.strip(),
             analysis_timestamp=datetime.utcnow(),
-            processing_time=2.0
+            processing_time=processing_time
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error analyzing document {document_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")

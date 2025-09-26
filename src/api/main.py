@@ -4,6 +4,24 @@ from fastapi.responses import JSONResponse
 import logging
 from datetime import datetime
 import uvicorn
+import sys
+import os
+from pathlib import Path
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent
+sys.path.append(str(project_root))
+
+# Import compliance engine
+try:
+    from updated_compliance_system import RuleBasedComplianceEngine
+    compliance_engine = RuleBasedComplianceEngine()
+    logger = logging.getLogger(__name__)
+    logger.info("Compliance engine initialized successfully")
+except Exception as e:
+    logger = logging.getLogger(__name__)
+    logger.error(f"Failed to initialize compliance engine: {e}")
+    compliance_engine = None
 
 from .routes import documents, compliance
 from .models.schemas import HealthCheckResponse, ErrorResponse
@@ -56,22 +74,33 @@ async def root():
 async def health_check():
     """Detailed health check endpoint"""
     try:
-        # TODO: Add actual health checks for:
-        # - Database connectivity
-        # - ML model availability
-        # - Ollama service status
-        # - File storage accessibility
-        
         services = {
             "api": "running",
-            "database": "connected",
-            "ml_models": "loaded", 
-            "ollama": "available",
-            "storage": "accessible"
+            "database": "connected",  # Mock - could add real DB check
+            "storage": "accessible",
         }
         
+        # Check compliance engine
+        if compliance_engine:
+            services["compliance_engine"] = "loaded"
+        else:
+            services["compliance_engine"] = "error"
+        
+        # Check if Legal BERT model is available
+        try:
+            model_path = project_root / "models" / "legal_bert_rule_classification"
+            if model_path.exists():
+                services["legal_bert"] = "loaded"
+            else:
+                services["legal_bert"] = "not_found"
+        except:
+            services["legal_bert"] = "error"
+        
+        # Determine overall status
+        status = "healthy" if all(s in ["running", "connected", "loaded", "accessible"] for s in services.values()) else "degraded"
+        
         return HealthCheckResponse(
-            status="healthy",
+            status=status,
             version="1.0.0",
             services=services,
             timestamp=datetime.utcnow()

@@ -44,6 +44,7 @@ wheels/
 .Trashes
 ehthumbs.db
 Thumbs.db
+desktop.ini
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -56,22 +57,35 @@ Thumbs.db
 *.log
 logs/
 *.sqlite
+
+# Database Files (Keep structure, ignore data)
+motor_vehicle_compliance.db
 *.db
 
-# Model Files (Large Files)
-models/legal_bert_compliance/model.safetensors
-models/legal_bert_compliance/pytorch_model.bin
+# Large Model Files (Keep configs, ignore large binaries)
+models/*/model.safetensors
+models/*/pytorch_model.bin
+models/*/checkpoint-*/
+models/*/training_args.bin
 *.bin
 *.safetensors
 
-# Data Files (Keep structure, ignore large files)
+# Data Files (Keep structure, ignore large/temporary files)
 data/uploads/*.pdf
+data/uploads/*.txt
+data/uploads/*.docx
 data/raw/*
 data/processed/*
+data/training/*.csv
 
-# Executables
+# Temporary Upload Directory
+temp_uploads/
+temp_uploads/*
+
+# Executables and Installers
 *.exe
 *.msi
+OllamaSetup.exe
 
 # Test Output Files
 test_results/
@@ -79,11 +93,34 @@ coverage/
 .coverage
 .pytest_cache/
 
-# Temporary Files
+# Temporary and Backup Files
 *.tmp
 *.temp
 *.bak
 *.backup
 
-# System Files
-desktop.ini
+# System Generated Files
+*.pyc
+*.pyo
+*.pyd
+
+# Large Training Data (Keep small samples)
+# Keep test_samples/ but ignore large datasets
+
+# Scraped Data (Keep structure, ignore large files)
+scraped_pdfs/
+D:/motor_compliance_scraper/
+
+# Development Files (Not needed for production)
+analyze_*.py
+fix_*.py
+find_*.py
+generate_*.py
+simple_*.py
+train_*.py
+working_*.py
+
+# Documentation Drafts (Keep main docs)
+project\ idea.txt
+DESIGN_DOCUMENT.md
+STARTUP_GUIDE.md

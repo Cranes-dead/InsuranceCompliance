@@ -9,6 +9,57 @@ from langdetect import detect
 
 logger = logging.getLogger(__name__)
 
+def parse_document(file_path: str) -> str:
+    """Simple function to extract text from a document file"""
+    try:
+        file_extension = Path(file_path).suffix.lower()
+        
+        if file_extension == '.pdf':
+            return extract_text_from_pdf(file_path)
+        elif file_extension in ['.txt', '.text']:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        else:
+            raise ValueError(f"Unsupported file format: {file_extension}")
+    
+    except Exception as e:
+        logger.error(f"Error parsing document {file_path}: {e}")
+        raise
+
+def extract_text_from_pdf(pdf_path: str) -> str:
+    """Extract text from PDF file"""
+    try:
+        text_content = ""
+        
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_content += page_text + "\n"
+        
+        return clean_text(text_content)
+        
+    except Exception as e:
+        logger.error(f"Error extracting text from PDF {pdf_path}: {e}")
+        raise
+
+def clean_text(text: str) -> str:
+    """Clean and normalize text"""
+    if not text:
+        return ""
+    
+    # Remove excessive whitespace
+    text = re.sub(r'\s+', ' ', text)
+    
+    # Remove special characters but keep important punctuation
+    text = re.sub(r'[^\w\s\.\,\;\:\!\?\-\(\)\[\]]', ' ', text)
+    
+    # Remove repeated punctuation
+    text = re.sub(r'\.{2,}', '.', text)
+    
+    # Strip and return
+    return text.strip()
+
 class DocumentProcessor:
     """Handles document parsing and text extraction"""
     

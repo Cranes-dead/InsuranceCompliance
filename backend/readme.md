@@ -1,102 +1,52 @@
-# Capstone Project Structure# 🏛️ Advanced AI Insurance Compliance System
+# 🏛️ Advanced AI Insurance Compliance System
 
+## 🚀 Overview
 
-
-The project is now organized into two top-level directories:## 🚀 Overview
-
-
-
-- `backend/` – FastAPI services, ML workflows, data assets, and supporting toolsA cutting-edge **AI-powered Motor Vehicle Insurance Compliance System** featuring **Legal BERT + Ollama** integration for advanced document analysis. The system provides automated compliance checking, AI-generated explanations, interactive policy chat, and comprehensive violation detection against IRDAI guidelines.
-
-- `frontend/` – Streamlit UI (Next.js implementation can be added here next)
+A cutting-edge **AI-powered Motor Vehicle Insurance Compliance System** featuring **Legal BERT + Ollama** integration for advanced document analysis. The system provides automated compliance checking, AI-generated explanations, interactive policy chat, and comprehensive violation detection against IRDAI guidelines.
 
 ### 🎯 **Dual AI Architecture**
-
-Everything required to run the system lives inside these two folders, so the rest of the repository can be safely removed if needed.- **🧠 Advanced AI Mode**: Legal BERT (90%+ accuracy) + Ollama for explanations & chat
-
+- **🧠 Advanced AI Mode**: Legal BERT (90%+ accuracy) + Ollama for explanations & chat
 - **📊 Simple Mode**: Traditional ML (87.5% accuracy) for reliable baseline performance
+- **🔄 Auto-Fallback**: Seamlessly switches between modes based on availability
 
-## Backend- **🔄 Auto-Fallback**: Seamlessly switches between modes based on availability
-
-
-
-```bash## ⚡ Quick Start
-
-cd backend
+## ⚡ Quick Start
 
 ### 🎯 **Option 1: Use Current Working System (Recommended)**
-
-# Install dependencies (example)Your system is ready to use right now with excellent performance!
-
-pip install -r requirements.txt
+Your system is ready to use right now with excellent performance!
 
 ```powershell
+# Terminal 1 - Start Backend
+python -m uvicorn api.main:app --reload
 
-# Run FastAPI backend# Terminal 1 - Start Backend
-
-uvicorn api.main:app --reload --port 8000python -m uvicorn api.main:app --reload
-
-
-
-# Run training scripts# Terminal 2 - Start Frontend
-
-python simple_legal_bert_training.pystreamlit run backup_pre_migration/src/frontend/compliance_app.py
-
-python phase1_domain_adaptation_optimized.py```
-
+# Terminal 2 - Start Frontend
+streamlit run backup_pre_migration/src/frontend/compliance_app.py
+```
 **Access**: 
+- 🌐 Frontend: http://localhost:8501
+- 📚 API Docs: http://localhost:8000/docs
 
-# Execute sample pipelines- 🌐 Frontend: http://localhost:8501
-
-python tests/test_pipeline.py- 📚 API Docs: http://localhost:8000/docs
-
-python tests/test_non_compliant.py
-
-python tests/test_review.py### 🚀 **Option 2: Upgrade to Advanced AI Features**
-
-```For cutting-edge AI capabilities with explanations and interactive chat:
-
-
-
-Data files, trained models, and utility scripts all reside under `backend/` so the code works when executed from that directory.```powershell
-
-# One-command setup (15-20 minutes)
-
-## Frontendpython setup_advanced_ai.py
-
-
-
-```bash# Or manual setup:
-
-cd frontendpython train_legal_bert.py    # Train Legal BERT model
-
-python setup_ollama.py        # Install Ollama AI service
-
-# Launch the Streamlit UI```
-
-streamlit run frontend_app.py
-
-```### 🧪 **Test & Demo**
+### 🚀 **Option 2: Upgrade to Advanced AI Features**
+For cutting-edge AI capabilities with explanations and interactive chat:
 
 ```powershell
+# One-command setup (15-20 minutes)
+python setup_advanced_ai.py
 
-Place the upcoming Next.js client inside `frontend/` alongside the Streamlit application.# Test current system
-
-python test_pipeline.py          # ✅ Compliant policy test
-
-## Notespython test_non_compliant.py     # ❌ Non-compliant policy test  
-
-python test_review.py            # ⚠️ Review required policy test
-
-- Sample documents remain in `backend/test_samples/`
-
-- Legacy artifacts are preserved under `backend/backup_pre_migration/`# Demo advanced AI features (after upgrade)
-
-- Logs, configs, and models all live inside `backend/`python demo_advanced_ai.py
-
+# Or manual setup:
+python train_legal_bert.py    # Train Legal BERT model
+python setup_ollama.py        # Install Ollama AI service
 ```
 
-Let me know if you want any additional restructuring or automation on top of this layout.
+### 🧪 **Test & Demo**
+```powershell
+# Test current system
+python test_pipeline.py          # ✅ Compliant policy test
+python test_non_compliant.py     # ❌ Non-compliant policy test  
+python test_review.py            # ⚠️ Review required policy test
+
+# Demo advanced AI features (after upgrade)
+python demo_advanced_ai.py
+```
 
 ## 🚀 Quick Start
 

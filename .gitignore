@@ -124,3 +124,7 @@ working_*.py
 project\ idea.txt
 DESIGN_DOCUMENT.md
 STARTUP_GUIDE.md
+
+*.bat
+start_frontend.bat
+start_frontend.ps1

@@ -1,0 +1,6 @@
+{
+  "model_type": "domain_adapted_classifier",
+  "domain_adapted_model_path": "C:\\Users\\adity\\OneDrive\\Desktop\\Capstone\\backend\\models\\legal_bert_domain_adapted",
+  "num_labels": 3,
+  "hidden_size": 768
+}

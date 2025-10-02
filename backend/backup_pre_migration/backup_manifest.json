@@ -1,0 +1,15 @@
+{
+  "timestamp": "2025-09-26T23:55:39.945873",
+  "project_root": "C:\\Users\\adity\\OneDrive\\Desktop\\Capstone",
+  "total_size_bytes": 153019,
+  "items_backed_up": [
+    "src/",
+    "updated_compliance_system.py",
+    "reclassify_rules.py",
+    "rule_based_classifier.py",
+    "requirements.txt",
+    "demo_system.py",
+    "simple_training.py"
+  ],
+  "migration_script_version": "2.0.0"
+}

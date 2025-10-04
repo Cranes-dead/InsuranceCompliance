@@ -66,10 +66,30 @@ class Settings(BaseModel):
     LEARNING_RATE: float = 2e-5
     NUM_EPOCHS: int = 3
     
-    # Ollama Configuration
+    # LLM Configuration (for RAG + LLaMA system)
+    LLM_PROVIDER: str = "ollama"  # Options: "ollama", "groq", "together", "openai"
+    LLM_MODEL: str = "llama3.1:8b"  # Model name for the provider
+    LLM_TEMPERATURE: float = 0.1  # Low for consistent compliance analysis
+    LLM_MAX_TOKENS: int = 2048
+    LLM_TIMEOUT: int = 120  # seconds
+    
+    # Ollama Configuration (for local deployment)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3.1"
+    OLLAMA_MODEL: str = "llama3.1:8b"
     OLLAMA_TIMEOUT: int = 120  # seconds
+    
+    # Groq API Configuration (for cloud deployment)
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "llama-3.1-70b-versatile"
+    
+    # RAG Configuration
+    VECTOR_STORE_PATH: Path = DATA_ROOT / "vector_store"
+    VECTOR_COLLECTION_NAME: str = "motor_vehicle_regulations"
+    RAG_TOP_K: int = 10  # Number of regulations to retrieve
+    RAG_MIN_RELEVANCE: str = "HIGH"  # Filter by relevance level
+    
+    # Data directory (for compatibility with RAG modules)
+    DATA_DIR: Path = DATA_ROOT
     
     # Logging Configuration
     LOG_LEVEL: str = "INFO"
@@ -102,3 +122,5 @@ settings = Settings()
 # Ensure important directories exist at runtime
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 settings.MODEL_DIR.mkdir(parents=True, exist_ok=True)
+settings.VECTOR_STORE_PATH.mkdir(parents=True, exist_ok=True)
+settings.DATA_DIR.mkdir(parents=True, exist_ok=True)

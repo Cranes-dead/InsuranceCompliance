@@ -412,6 +412,20 @@ class MotorVehicleComplianceDocumentScraper:
         motor_pdf_links = []
         
         try:
+            current_url = self.driver.current_url
+            
+            # Special handling for IRDAI search/document pages
+            if 'irdai.gov.in' in current_url.lower():
+                # Check if this is a search results page with document-detail links
+                if 'search?' in current_url or 'cur=' in current_url:
+                    logger.info("🔍 Detected IRDAI search page - looking for document-detail links")
+                    return self._find_irdai_document_links()
+                # Check if this is a document detail page with download button
+                elif 'document-detail?' in current_url or 'documentId=' in current_url:
+                    logger.info("📄 Detected IRDAI document-detail page - extracting PDF download links")
+                    return self._extract_irdai_document_pdfs()
+            
+            # Standard PDF link finding for other sites
             # Find all anchor tags
             links = self.driver.find_elements(By.TAG_NAME, "a")
             
@@ -456,6 +470,206 @@ class MotorVehicleComplianceDocumentScraper:
         except Exception as e:
             logger.error(f"Error finding PDF links: {e}")
             self.stats['selenium_errors'] += 1
+            return []
+    
+    def _find_irdai_document_links(self):
+        """Find document-detail links on IRDAI search results page"""
+        document_links = []
+        
+        try:
+            # Wait for search results to load
+            time.sleep(3)
+            
+            # Find all links on the page
+            links = self.driver.find_elements(By.TAG_NAME, "a")
+            
+            for link in links:
+                try:
+                    href = link.get_attribute("href")
+                    text = link.text.strip()
+                    
+                    # Look for document-detail links
+                    if href and 'document-detail?' in href and 'documentId=' in href:
+                        absolute_url = urljoin(self.driver.current_url, href)
+                        
+                        if absolute_url not in self.processed_urls:
+                            link_data = {
+                                'element': link,
+                                'url': absolute_url,
+                                'text': text,
+                                'parent_text': '',
+                                'is_irdai_document': True
+                            }
+                            document_links.append(link_data)
+                            logger.info(f"📋 Found IRDAI document link: {text[:80]}...")
+                
+                except Exception as e:
+                    logger.warning(f"Error processing document link: {e}")
+                    continue
+            
+            logger.info(f"✅ Found {len(document_links)} IRDAI document-detail links")
+            return document_links
+            
+        except Exception as e:
+            logger.error(f"Error finding IRDAI document links: {e}")
+            return []
+    
+    def _extract_irdai_document_pdfs(self, max_click_retries=2, current_retry=0):
+        """Extract PDF download links from IRDAI document-detail page"""
+        pdf_links = []
+        
+        try:
+            # Wait for page to fully load
+            time.sleep(3)
+            
+            # Get page title once for fallback use
+            page_title = ""
+            try:
+                page_title = self.driver.find_element(By.TAG_NAME, "h1").text.strip()
+            except:
+                try:
+                    page_title = self.driver.title
+                except:
+                    page_title = "IRDAI Document"
+            
+            # Strategy 1: Look for direct PDF download links with download=true in href
+            # Priority 1: Find <a> tags with href containing download=true (best option)
+            download_links = self.driver.find_elements(By.XPATH, "//a[contains(@href, 'download=true')]")
+            
+            for link in download_links:
+                try:
+                    href = link.get_attribute("href")
+                    
+                    # Look for IRDAI PDF download links
+                    if href and '.pdf' in href.lower() and 'irdai.gov.in/documents/' in href:
+                        # Extract filename from URL for better text
+                        filename_from_url = ""
+                        try:
+                            # Extract filename: /documents/37343/365561/Premium+Rates+for+Motor+Third+Party.pdf/uuid
+                            # The .pdf part IS the filename, not the part before it
+                            url_parts = href.split('/')
+                            for part in url_parts:
+                                if '.pdf' in part.lower():
+                                    # Remove query parameters and get just the filename
+                                    filename_from_url = part.split('?')[0].replace('+', ' ').replace('%20', ' ')
+                                    break
+                        except:
+                            pass
+                        
+                        # Priority: link text → title attribute → filename from URL → page title → fallback
+                        text = link.text.strip() or link.get_attribute("title") or filename_from_url or page_title or "IRDAI Document"
+                        
+                        absolute_url = urljoin(self.driver.current_url, href)
+                        
+                        # Ensure download=true parameter
+                        if 'download=true' not in absolute_url:
+                            if '?' in absolute_url:
+                                absolute_url += '&download=true'
+                            else:
+                                absolute_url += '?download=true'
+                        
+                        if absolute_url not in self.processed_urls:
+                            link_data = {
+                                'element': link,
+                                'url': absolute_url,
+                                'text': text,
+                                'parent_text': '',
+                                'is_irdai_pdf': True
+                            }
+                            pdf_links.append(link_data)
+                            logger.info(f"📥 Found IRDAI PDF: {text[:80]}...")
+                
+                except Exception as e:
+                    logger.warning(f"Error extracting download link: {e}")
+                    continue
+            
+            # Strategy 2: Fallback - Look for any PDF links if Strategy 1 found nothing
+            if not pdf_links:
+                logger.info("🔍 No download=true links found, checking all PDF links...")
+                links = self.driver.find_elements(By.TAG_NAME, "a")
+                
+                for link in links:
+                    try:
+                        href = link.get_attribute("href")
+                        
+                        # Look for direct PDF download links
+                        if href and '.pdf' in href.lower():
+                            # IRDAI pattern: /documents/{id1}/{id2}/{filename}.pdf/{uuid}?...&download=true
+                            if 'irdai.gov.in/documents/' in href:
+                                # Extract filename from URL as fallback
+                                filename_from_url = ""
+                                try:
+                                    # Extract filename: /documents/37343/365561/Motor+Third+Party.pdf/uuid
+                                    url_parts = href.split('/')
+                                    for i, part in enumerate(url_parts):
+                                        if '.pdf' in part.lower() and i > 0:
+                                            filename_from_url = url_parts[i-1].replace('+', ' ').replace('%20', ' ')
+                                            break
+                                except:
+                                    pass
+                                
+                                # Priority: link text → title attribute → filename from URL → page title → fallback
+                                text = link.text.strip() or link.get_attribute("title") or filename_from_url or page_title or "IRDAI Document"
+                                
+                                absolute_url = urljoin(self.driver.current_url, href)
+                                
+                                # Ensure download=true parameter
+                                if 'download=true' not in absolute_url:
+                                    if '?' in absolute_url:
+                                        absolute_url += '&download=true'
+                                    else:
+                                        absolute_url += '?download=true'
+                                
+                                if absolute_url not in self.processed_urls:
+                                    link_data = {
+                                        'element': link,
+                                        'url': absolute_url,
+                                        'text': text,
+                                        'parent_text': '',
+                                        'is_irdai_pdf': True
+                                    }
+                                    pdf_links.append(link_data)
+                                    logger.info(f"📥 Found IRDAI PDF: {text[:80]}...")
+                    
+                    except Exception as e:
+                        logger.warning(f"Error extracting PDF link (fallback): {e}")
+                        continue
+            
+            # Strategy 3: Try to find and click download button if still no PDFs found (with retry limit)
+            if not pdf_links and current_retry < max_click_retries:
+                logger.info(f"🔍 No direct PDF links found, looking for download button (attempt {current_retry+1}/{max_click_retries})...")
+                try:
+                    # Look for download button/link
+                    download_selectors = [
+                        "//a[contains(@onclick, 'downloadAll')]",
+                        "//a[contains(@title, 'Download')]",
+                        "//label[contains(@class, 'label-download')]/..",
+                        "//svg[contains(@class, 'lexicon-icon-download')]/../.."
+                    ]
+                    
+                    for selector in download_selectors:
+                        try:
+                            download_elements = self.driver.find_elements(By.XPATH, selector)
+                            if download_elements:
+                                logger.info(f"✅ Found {len(download_elements)} download button(s)")
+                                # Click the first download button
+                                download_elements[0].click()
+                                time.sleep(2)
+                                # Recursive call with incremented retry counter
+                                return self._extract_irdai_document_pdfs(max_click_retries, current_retry + 1)
+                        except:
+                            continue
+                    
+                except Exception as e:
+                    logger.warning(f"Could not find/click download button: {e}")
+            elif not pdf_links and current_retry >= max_click_retries:
+                logger.warning(f"⚠️  No PDFs found after {max_click_retries} download button attempts")
+            
+            logger.info(f"✅ Extracted {len(pdf_links)} PDF links from IRDAI document page")
+            return pdf_links
+            
+        except Exception as e:
+            logger.error(f"Error extracting IRDAI PDFs: {e}")
             return []
 
     def is_motor_vehicle_related(self, text):

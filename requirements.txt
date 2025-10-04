@@ -49,3 +49,12 @@ httpx>=0.25.0
 
 # Ollama integration
 ollama>=0.1.0
+
+# Vector Database for RAG
+chromadb>=0.4.18
+faiss-cpu>=1.7.4
+
+# LLM API clients
+groq>=0.4.0  # For Groq API (optional, fast inference)
+httpx>=0.25.0  # Already included above, for API calls
+ollama>=0.1.0

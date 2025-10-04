@@ -5,7 +5,9 @@ Uses Pydantic Settings for type-safe configuration with environment variable sup
 
 from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, validator
+from pydantic_settings import BaseSettings
 from pathlib import Path
+import os
 
 
 # Resolve backend root regardless of working directory
@@ -15,7 +17,7 @@ MODELS_ROOT = BACKEND_ROOT / "models"
 UPLOADS_ROOT = DATA_ROOT / "uploads"
 
 
-class Settings(BaseModel):
+class Settings(BaseSettings):
     """Application settings with environment variable support."""
     
     # Application Info
@@ -67,11 +69,11 @@ class Settings(BaseModel):
     NUM_EPOCHS: int = 3
     
     # LLM Configuration (for RAG + LLaMA system)
-    LLM_PROVIDER: str = "ollama"  # Options: "ollama", "groq", "together", "openai"
-    LLM_MODEL: str = "llama3.1:8b"  # Model name for the provider
-    LLM_TEMPERATURE: float = 0.1  # Low for consistent compliance analysis
-    LLM_MAX_TOKENS: int = 2048
-    LLM_TIMEOUT: int = 120  # seconds
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "ollama")  # Options: "ollama", "groq", "together", "openai"
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "llama3.1:8b")  # Model name for the provider
+    LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))  # Low for consistent compliance analysis
+    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "2048"))
+    LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "120"))  # seconds
     
     # Ollama Configuration (for local deployment)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -79,8 +81,8 @@ class Settings(BaseModel):
     OLLAMA_TIMEOUT: int = 120  # seconds
     
     # Groq API Configuration (for cloud deployment)
-    GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "llama-3.1-70b-versatile"
+    GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"  # Updated: 3.1 was decommissioned
     
     # RAG Configuration
     VECTOR_STORE_PATH: Path = DATA_ROOT / "vector_store"
@@ -110,13 +112,16 @@ class Settings(BaseModel):
     REDIS_URL: Optional[str] = None
     CACHE_TTL: int = 3600  # 1 hour
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = {
+        "env_file": str(BACKEND_ROOT / ".env"),
+        "env_file_encoding": "utf-8",
+        "case_sensitive": True,
+        "extra": "allow"
+    }
 
 
 # Global settings instance
-settings = Settings()
+settings = Settings(_env_file=str(BACKEND_ROOT / ".env"))
 
 
 # Ensure important directories exist at runtime

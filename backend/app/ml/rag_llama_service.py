@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 
 from app.models.enums import ComplianceClassification
+from app.core.config import settings
 from .rag import RegulationVectorStore, RegulationRetriever
 from .llm import LLaMAComplianceEngine, LLMConfig
 
@@ -31,6 +32,18 @@ class RAGLLaMAComplianceService:
             llm_config: Configuration for LLaMA engine
             vector_store: Optional pre-configured vector store
         """
+        # Use config from settings if not provided
+        if llm_config is None and settings.LLM_PROVIDER:
+            llm_config = LLMConfig(
+                provider=settings.LLM_PROVIDER,
+                model=settings.LLM_MODEL if settings.LLM_PROVIDER != "groq" else settings.GROQ_MODEL,
+                api_key=settings.GROQ_API_KEY if settings.LLM_PROVIDER == "groq" else None,
+                temperature=settings.LLM_TEMPERATURE,
+                timeout=settings.LLM_TIMEOUT,
+                max_tokens=settings.LLM_MAX_TOKENS
+            )
+            logger.info(f"🔧 Using LLM provider from config: {settings.LLM_PROVIDER}")
+        
         # Initialize components
         self.vector_store = vector_store or RegulationVectorStore()
         self.retriever = RegulationRetriever(self.vector_store)

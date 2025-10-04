@@ -30,7 +30,6 @@ class LLMConfig(BaseModel):
     temperature: float = 0.1  # Low temperature for consistent compliance analysis
     timeout: float = 300.0  # 5 minutes for complex compliance analysis
     max_tokens: int = 2048
-    timeout: float = 120.0
 
 
 class LLMProvider(ABC):
@@ -103,16 +102,24 @@ class GroqProvider(LLMProvider):
         
         async with httpx.AsyncClient(timeout=self.config.timeout) as client:
             try:
+                payload = {
+                    "model": self.model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": temperature,
+                    "max_tokens": self.config.max_tokens
+                }
+                
                 response = await client.post(
                     url,
                     headers=headers,
-                    json={
-                        "model": self.model,
-                        "messages": [{"role": "user", "content": prompt}],
-                        "temperature": temperature,
-                        "max_tokens": self.config.max_tokens
-                    }
+                    json=payload
                 )
+                
+                # Log error details for debugging
+                if response.status_code != 200:
+                    error_detail = response.text
+                    logger.error(f"Groq API error ({response.status_code}): {error_detail}")
+                
                 response.raise_for_status()
                 result = response.json()
                 return result["choices"][0]["message"]["content"]
@@ -209,6 +216,18 @@ class LLaMAComplianceEngine:
                 json_str = json_str.split("```")[1].split("```")[0].strip()
             
             result = json.loads(json_str)
+            
+            # Post-process: Ensure recommendations are strings (LLaMA sometimes returns dicts)
+            if "recommendations" in result and isinstance(result["recommendations"], list):
+                processed_recommendations = []
+                for rec in result["recommendations"]:
+                    if isinstance(rec, dict):
+                        # Extract description field if it's a dict
+                        processed_recommendations.append(rec.get("description", str(rec)))
+                    else:
+                        processed_recommendations.append(str(rec))
+                result["recommendations"] = processed_recommendations
+            
             logger.info(f"✅ Analysis complete: {result.get('classification')}")
             return result
             

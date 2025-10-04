@@ -266,7 +266,7 @@ class Phase2ComplianceEngine:
         return {
             "classification": classification,
             "confidence": confidence,
-            "compliance_score": confidence,
+            "compliance_score": round(confidence * 100, 1),  # Convert to percentage (0-100)
             "explanation": explanations.get(
                 classification, "Unable to determine compliance status"
             ),

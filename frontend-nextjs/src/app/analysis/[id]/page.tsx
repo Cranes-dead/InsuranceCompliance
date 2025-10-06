@@ -155,7 +155,7 @@ export default function AnalysisPage() {
                     <div>
                       <p className="text-sm">Analyzed</p>
                       <p className="font-semibold text-gray-900">
-                        {new Date(analysis.created_at).toLocaleString()}
+                        {new Date(analysis.created_at).toLocaleString()} UTC
                       </p>
                     </div>
                   </div>

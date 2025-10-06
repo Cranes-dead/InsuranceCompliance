@@ -34,33 +34,23 @@ export default function FileUpload() {
     setProgress(0);
 
     try {
-      // Show progress with status messages
-      const progressSteps = [
-        { progress: 10, message: 'Uploading PDF...', time: 500 },
-        { progress: 25, message: 'Extracting text...', time: 1000 },
-        { progress: 40, message: 'Generating embeddings...', time: 2000 },
-        { progress: 60, message: 'Retrieving regulations...', time: 3000 },
-        { progress: 80, message: 'LLaMA analysis in progress...', time: 10000 },
-        { progress: 90, message: 'Finalizing results...', time: 15000 },
-      ];
-
-      let currentStep = 0;
-      const progressInterval = setInterval(() => {
-        if (currentStep < progressSteps.length) {
-          const step = progressSteps[currentStep];
-          setProgress(step.progress);
-          toast.loading(step.message, { id: 'analysis-progress' });
-          currentStep++;
-        }
-      }, 2000); // Update every 2 seconds
+      // Show honest progress messaging (no fake progress bar)
+      toast.loading('Uploading and analyzing policy...', { id: 'analysis-progress' });
+      setProgress(50); // Show activity, not fake completion
 
       const response = await api.uploadPolicy(file);
       
-      clearInterval(progressInterval);
       toast.dismiss('analysis-progress');
       setProgress(100);
 
       toast.success('Policy analyzed successfully!');
+      
+      // Clear file input to prevent confusion on browser back
+      setFile(null);
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) {
+        fileInput.value = '';
+      }
       
       // Redirect to analysis page
       setTimeout(() => {
@@ -68,8 +58,24 @@ export default function FileUpload() {
       }, 500);
 
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Upload failed. Please try again.');
+      // Clear progress on error
+      toast.dismiss('analysis-progress');
       setProgress(0);
+      
+      // Provide helpful error messages
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        toast.error(
+          'Analysis is taking longer than expected. ' +
+          'Your file may still be processing. Check the policy list in a few minutes.',
+          { duration: 8000 }
+        );
+      } else if (error.response?.status === 429) {
+        toast.error('Too many requests. Please wait a moment and try again.');
+      } else if (error.response?.status === 400) {
+        toast.error(error.response?.data?.detail || 'Invalid file. Please check file format and size.');
+      } else {
+        toast.error(error.response?.data?.message || error.response?.data?.detail || 'Upload failed. Please try again.');
+      }
     } finally {
       setUploading(false);
     }
@@ -105,7 +111,7 @@ export default function FileUpload() {
                 or click to browse files
               </p>
               <p className="text-xs text-gray-400">
-                Supports PDF files only • Max 10MB
+                Supports PDF files only • Max 50MB
               </p>
             </>
           )}

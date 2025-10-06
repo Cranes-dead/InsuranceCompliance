@@ -10,9 +10,18 @@ from datetime import datetime
 
 from app.core import get_logger
 from app.services.compliance_service import ComplianceService
+from app.db import get_supabase_service
 from ...dependencies import get_compliance_service
+from collections import defaultdict
 
 logger = get_logger(__name__)
+
+# Chat message length limit
+MAX_MESSAGE_LENGTH = 10000  # 10K characters
+
+# Rate limiting: In-memory store (use Redis for production)
+MAX_MESSAGES_PER_MINUTE = 10
+message_timestamps = defaultdict(list)
 
 router = APIRouter()
 
@@ -37,10 +46,13 @@ async def chat_with_policy(
     compliance_service: ComplianceService = Depends(get_compliance_service)
 ):
     """
-    Chat with AI about a policy using RAG + LLaMA.
+    Chat with AI about a policy using RAG + LLaMA with database persistence.
     
-    Uses the full analysis context including violations, regulations,
-    and compliance details to provide accurate, context-aware responses.
+    Edge cases handled:
+    - Message length validation (10K character limit)
+    - Chat session management in database
+    - Message history persistence
+    - Policy context validation
     
     Args:
         request: Chat request with message and session ID (policy_id)
@@ -48,12 +60,38 @@ async def chat_with_policy(
     Returns:
         AI-generated response with full policy context
     """
+    db = get_supabase_service()
+    
     try:
-        # Import policies store to get analysis results
-        from .policies import policies_store
+        # Rate limiting: Max messages per minute per policy
+        now = datetime.utcnow()
+        policy_id = request.session_id
         
-        # Get policy data - this contains the full analysis
-        policy_data = policies_store.get(request.session_id)
+        # Clean old timestamps (older than 1 minute)
+        message_timestamps[policy_id] = [
+            ts for ts in message_timestamps[policy_id]
+            if (now - ts).total_seconds() < 60
+        ]
+        
+        # Check rate limit
+        if len(message_timestamps[policy_id]) >= MAX_MESSAGES_PER_MINUTE:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Maximum {MAX_MESSAGES_PER_MINUTE} messages per minute."
+            )
+        
+        # Add current timestamp
+        message_timestamps[policy_id].append(now)
+        
+        # Validate message length
+        if len(request.message) > MAX_MESSAGE_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Message exceeds maximum length of {MAX_MESSAGE_LENGTH} characters"
+            )
+        
+        # Get policy data from database
+        policy_data = await db.get_policy(request.session_id)
         
         if not policy_data:
             return ChatResponse(
@@ -61,6 +99,24 @@ async def chat_with_policy(
                 session_id=request.session_id,
                 timestamp=datetime.utcnow().isoformat()
             )
+        
+        # Validate policy has complete analysis data
+        if not policy_data.get('classification') or not policy_data.get('rag_metadata'):
+            return ChatResponse(
+                response="This policy hasn't been fully analyzed yet. Please wait for the analysis to complete before chatting.",
+                session_id=request.session_id,
+                timestamp=datetime.utcnow().isoformat()
+            )
+        
+        # Get or create chat session
+        chat_session_id = await db.get_or_create_chat_session(request.session_id)
+        
+        # Store user message
+        await db.add_chat_message(
+            session_id=chat_session_id,
+            role="user",
+            content=request.message
+        )
         
         # Prepare analysis results for RAG+LLaMA chat
         analysis_results = {
@@ -99,7 +155,14 @@ async def chat_with_policy(
                 analysis_results
             )
         
-        logger.info(f"Chat response generated for session {request.session_id}")
+        logger.info(f"✅ Chat response generated for session {request.session_id}")
+        
+        # Store assistant response in database
+        await db.add_chat_message(
+            session_id=chat_session_id,
+            role="assistant",
+            content=response_text
+        )
         
         return ChatResponse(
             response=response_text,

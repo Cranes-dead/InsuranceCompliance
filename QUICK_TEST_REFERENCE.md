@@ -1,4 +1,6 @@
-# Quick Test Reference
+# Quick Test Reference - After Edge Case Fixes
+
+## ⚡ NEW: Edge Case Tests (January 4, 2025)
 
 ## TL;DR - Just tell me what to run!
 

@@ -67,8 +67,8 @@ export default function PolicyGrid({ policies, className = '' }: PolicyGridProps
 
             {/* Dates */}
             <div className="text-xs text-gray-500 space-y-1">
-              <p>Uploaded: {new Date(policy.uploadedAt).toLocaleDateString()}</p>
-              <p>Analyzed: {new Date(policy.lastAnalyzed).toLocaleDateString()}</p>
+              <p>Uploaded: {new Date(policy.uploadedAt).toLocaleDateString()} UTC</p>
+              <p>Analyzed: {new Date(policy.lastAnalyzed).toLocaleDateString()} UTC</p>
             </div>
           </div>
         </div>

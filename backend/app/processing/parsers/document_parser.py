@@ -95,8 +95,19 @@ class DocumentParser:
                     error_code="EMPTY_DOCUMENT"
                 )
             
+            # Validate minimum content length
+            MIN_DOCUMENT_LENGTH = 100  # characters
+            content_stripped = content.strip()
+            if len(content_stripped) < MIN_DOCUMENT_LENGTH:
+                raise DocumentProcessingError(
+                    f"Document content too short ({len(content_stripped)} characters). "
+                    f"Minimum {MIN_DOCUMENT_LENGTH} characters required for analysis.",
+                    error_code="INSUFFICIENT_CONTENT",
+                    details={"content_length": len(content_stripped), "minimum_required": MIN_DOCUMENT_LENGTH}
+                )
+            
             logger.info(f"Successfully parsed document: {file_path} ({len(content)} characters)")
-            return content.strip()
+            return content_stripped
             
         except DocumentProcessingError:
             raise

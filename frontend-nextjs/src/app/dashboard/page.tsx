@@ -205,7 +205,7 @@ export default function DashboardPage() {
                             {analysis.compliance_score}%
                           </td>
                           <td className="py-3 px-4 text-sm text-gray-600">
-                            {new Date(analysis.created_at).toLocaleDateString()}
+                            {new Date(analysis.created_at).toLocaleDateString()} UTC
                           </td>
                           <td className="py-3 px-4">
                             <button

@@ -50,7 +50,7 @@ RAGLLaMAComplianceService
 └─────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────┐
-│ 3. LLaMA 3.1 (Reasoning Engine)     │
+│ 3. LLaMA 3.3 (Reasoning Engine)     │
 │    - Input: Policy + Regulations    │
 │    - Output: Classification +       │
 │              Violations +           │

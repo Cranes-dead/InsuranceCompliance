@@ -57,10 +57,16 @@ desktop.ini
 *.log
 logs/
 *.sqlite
+*.sqlite3
 
 # Database Files (Keep structure, ignore data)
 motor_vehicle_compliance.db
 *.db
+
+# Vector Store (ChromaDB - regenerated from source)
+data/vector_store/*.sqlite3
+data/vector_store/chroma.sqlite3
+data/vector_store/*/
 
 # Large Model Files (Keep configs, ignore large binaries)
 models/*/model.safetensors

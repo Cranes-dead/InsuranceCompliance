@@ -139,3 +139,18 @@ STARTUP_GUIDE.md
 start_frontend.bat
 start_frontend.ps1
 generate_diagrams.ps1
+
+# Frontend (Next.js)
+frontend-nextjs/node_modules/
+frontend-nextjs/.next/
+frontend-nextjs/out/
+frontend-nextjs/build/
+frontend-nextjs/coverage/
+frontend-nextjs/.vercel/
+frontend-nextjs/.pnp
+frontend-nextjs/.pnp.*
+frontend-nextjs/npm-debug.log*
+frontend-nextjs/yarn-debug.log*
+frontend-nextjs/yarn-error.log*
+frontend-nextjs/.pnpm-debug.log*
+frontend-nextjs/next-env.d.ts

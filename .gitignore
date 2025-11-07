@@ -88,6 +88,10 @@ data/training/*.csv
 temp_uploads/
 temp_uploads/*
 
+# Project Artifacts
+diagrams/
+backend/data/uploads/
+
 # Executables and Installers
 *.exe
 *.msi
@@ -134,3 +138,4 @@ STARTUP_GUIDE.md
 *.bat
 start_frontend.bat
 start_frontend.ps1
+generate_diagrams.ps1

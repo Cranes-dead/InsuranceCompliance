@@ -86,10 +86,11 @@ def create_app() -> FastAPI:
         response.headers["X-Process-Time"] = str(process_time)
         return response
     
-    # Request ID middleware
+    # Request ID middleware (Phase 6: UUID4 correlation IDs via contextvars)
     @app.middleware("http")
     async def add_request_id(request: Request, call_next):
-        request_id = str(int(time.time() * 1000))
+        from app.core.context import set_request_id
+        request_id = set_request_id()
         request.state.request_id = request_id
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id

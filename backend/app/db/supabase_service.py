@@ -18,9 +18,25 @@ class SupabaseService:
     """Service for interacting with Supabase database."""
     
     def __init__(self):
-        """Initialize Supabase client."""
-        self.url = os.getenv("SUPABASE_URL", "https://ruwnawyecvazilaqseca.supabase.co")
-        self.key = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1d25hd3llY3ZhemlsYXFzZWNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzOTUyNDcsImV4cCI6MjA3NDk3MTI0N30.OzLULXSN4b_ly3wYa6RiZmYXBYj-y-2eFgZ6-fsy3B4")
+        """Initialize Supabase client.
+        
+        Requires SUPABASE_URL and SUPABASE_KEY environment variables to be set.
+        Raises ConfigurationError if either is missing.
+        """
+        self.url = os.getenv("SUPABASE_URL")
+        self.key = os.getenv("SUPABASE_KEY")
+        
+        if not self.url:
+            raise ValueError(
+                "SUPABASE_URL environment variable is required. "
+                "Set it in your .env file or environment."
+            )
+        if not self.key:
+            raise ValueError(
+                "SUPABASE_KEY environment variable is required. "
+                "Set it in your .env file or environment."
+            )
+        
         self.client: Client = create_client(self.url, self.key)
         logger.info("✅ Supabase client initialized")
     

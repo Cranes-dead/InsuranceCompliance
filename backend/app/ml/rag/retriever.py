@@ -41,10 +41,15 @@ class RegulationRetriever:
     ) -> List[Dict[str, Any]]:
         """Retrieve regulations relevant to a policy document.
         
+        Uses a focused query strategy since Legal-BERT truncates at 512 tokens.
+        Instead of passing the full policy text (which would silently lose most
+        of the content), we extract key portions to build a representative query.
+        
         Args:
             policy_text: Full or partial policy text
             top_k: Number of regulations to retrieve
-            min_relevance: Filter by relevance level ('HIGH', 'MEDIUM')
+            min_relevance: Minimum relevance threshold ('HIGH' = only HIGH,
+                           'MEDIUM' = HIGH + MEDIUM). Default: no filter.
             
         Returns:
             List of relevant regulations with metadata
@@ -52,14 +57,26 @@ class RegulationRetriever:
         if not self._initialized:
             await self.initialize()
         
-        # Prepare metadata filter
+        # LOGIC-02 FIX: Build proper threshold filter instead of equality match
+        # ChromaDB 'where' only supports equality, so we expand to matching values
         filter_metadata = None
         if min_relevance:
-            filter_metadata = {"relevance": min_relevance}
+            relevance_hierarchy = ["HIGH", "MEDIUM", "LOW"]
+            try:
+                threshold_idx = relevance_hierarchy.index(min_relevance)
+                allowed_values = relevance_hierarchy[:threshold_idx + 1]
+                filter_metadata = {"relevance": {"$in": allowed_values}}
+            except ValueError:
+                logger.warning(f"Unknown relevance level '{min_relevance}', skipping filter")
+        
+        # LOGIC-01 FIX: Build a focused query instead of passing full policy text.
+        # Legal-BERT truncates at 512 tokens (~400 words), so passing a 50K-char
+        # document means only the first ~400 words are actually embedded.
+        query_text = self._build_focused_query(policy_text)
         
         # Retrieve from vector store
         results = await self.vector_store.retrieve(
-            query=policy_text,
+            query=query_text,
             top_k=top_k,
             filter_metadata=filter_metadata
         )
@@ -72,6 +89,41 @@ class RegulationRetriever:
             result['similarity_score'] = round(similarity, 4)
         
         return results
+    
+    def _build_focused_query(self, policy_text: str, max_words: int = 350) -> str:
+        """Build a focused query from a policy document.
+        
+        Instead of embedding the full text (which gets truncated silently),
+        extracts a representative sample: the beginning (which usually contains
+        policy type, insurer, coverage overview) and the end (which often has
+        compliance-critical terms and conditions).
+        
+        Args:
+            policy_text: Full policy document text
+            max_words: Maximum words for the query (should stay under 512 tokens)
+            
+        Returns:
+            Focused query text suitable for embedding
+        """
+        words = policy_text.split()
+        
+        if len(words) <= max_words:
+            return policy_text
+        
+        # Take first 250 words (policy type, coverage, insurer info) and 
+        # last 100 words (terms, conditions, compliance clauses)
+        head_words = 250
+        tail_words = 100
+        
+        head = " ".join(words[:head_words])
+        tail = " ".join(words[-tail_words:])
+        
+        query = f"{head} [...] {tail}"
+        logger.debug(
+            f"Built focused query: {len(words)} words → {head_words + tail_words} words "
+            f"(head + tail strategy)"
+        )
+        return query
     
     async def retrieve_for_section(
         self,

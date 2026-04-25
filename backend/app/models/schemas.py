@@ -3,7 +3,7 @@ Pydantic schemas for API requests and responses.
 Next.js friendly with proper JSON serialization.
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from uuid import UUID, uuid4
@@ -23,16 +23,11 @@ from .enums import (
 class BaseSchema(BaseModel):
     """Base schema with common configuration."""
     
-    class Config:
-        # JSON serialization for Next.js compatibility
-        json_encoders = {
-            datetime: lambda v: v.isoformat(),
-            UUID: lambda v: str(v)
-        }
+    # QUALITY-01: Pydantic V2 style configuration (replaces deprecated inner Config class)
+    model_config = ConfigDict(
         # Allow using enums by value
-        use_enum_values = True
-        # Validate field defaults
-        validate_all = True
+        use_enum_values=True,
+    )
 
 
 # Document Schemas
@@ -141,7 +136,8 @@ class BatchAnalysisRequest(BaseSchema):
     custom_rules: Optional[List[str]] = None
     priority: Optional[str] = Field("normal", description="Batch processing priority")
     
-    @validator("document_ids")
+    @field_validator("document_ids")
+    @classmethod
     def validate_unique_documents(cls, v):
         if len(v) != len(set(v)):
             raise ValueError("Document IDs must be unique")

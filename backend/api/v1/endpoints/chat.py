@@ -12,16 +12,42 @@ from app.core import get_logger
 from app.services.compliance_service import ComplianceService
 from app.db import get_supabase_service
 from ...dependencies import get_compliance_service
-from collections import defaultdict
 
 logger = get_logger(__name__)
 
 # Chat message length limit
 MAX_MESSAGE_LENGTH = 10000  # 10K characters
 
-# Rate limiting: In-memory store (use Redis for production)
+# Rate limiting: Bounded in-memory store with cleanup (use Redis for production)
 MAX_MESSAGES_PER_MINUTE = 10
-message_timestamps = defaultdict(list)
+MAX_TRACKED_SESSIONS = 10000  # Max sessions to track before cleanup
+message_timestamps: Dict[str, list] = {}
+
+
+def _get_rate_limit_timestamps(policy_id: str, now: datetime) -> list:
+    """Get cleaned timestamps for a policy, with global eviction if store is too large."""
+    # Global cleanup: evict oldest sessions if we exceed the max
+    if len(message_timestamps) > MAX_TRACKED_SESSIONS:
+        # Sort sessions by their most recent timestamp and keep only the newest half
+        sorted_sessions = sorted(
+            message_timestamps.items(),
+            key=lambda item: max(item[1]) if item[1] else datetime.min,
+            reverse=True
+        )
+        message_timestamps.clear()
+        for sid, timestamps in sorted_sessions[:MAX_TRACKED_SESSIONS // 2]:
+            message_timestamps[sid] = timestamps
+    
+    # Per-session cleanup: remove timestamps older than 1 minute
+    if policy_id in message_timestamps:
+        message_timestamps[policy_id] = [
+            ts for ts in message_timestamps[policy_id]
+            if (now - ts).total_seconds() < 60
+        ]
+    else:
+        message_timestamps[policy_id] = []
+    
+    return message_timestamps[policy_id]
 
 router = APIRouter()
 
@@ -67,14 +93,11 @@ async def chat_with_policy(
         now = datetime.utcnow()
         policy_id = request.session_id
         
-        # Clean old timestamps (older than 1 minute)
-        message_timestamps[policy_id] = [
-            ts for ts in message_timestamps[policy_id]
-            if (now - ts).total_seconds() < 60
-        ]
+        # Get cleaned timestamps (handles eviction + per-session cleanup)
+        timestamps = _get_rate_limit_timestamps(policy_id, now)
         
         # Check rate limit
-        if len(message_timestamps[policy_id]) >= MAX_MESSAGES_PER_MINUTE:
+        if len(timestamps) >= MAX_MESSAGES_PER_MINUTE:
             raise HTTPException(
                 status_code=429,
                 detail=f"Rate limit exceeded. Maximum {MAX_MESSAGES_PER_MINUTE} messages per minute."
@@ -298,131 +321,9 @@ async def _generate_contextual_response(
     return response
 
 
-def _build_chat_context(message: str, policy_data: Optional[Dict[str, Any]]) -> str:
-    """Build context string for LLaMA (legacy, for backward compatibility)."""
-    if not policy_data:
-        return f"""You are an AI compliance assistant specializing in IRDAI insurance regulations.
-        
-User Question: {message}
+# NOTE: _build_chat_context() and _generate_fallback_response() were removed
+# as dead code (DEAD-06). The active path uses _generate_contextual_response().
 
-Please provide a helpful response about insurance compliance and IRDAI regulations."""
-    
-    context = f"""You are an AI compliance assistant. You have analyzed an insurance policy document.
-
-Policy Information:
-- Filename: {policy_data.get('filename', 'Unknown')}
-- Classification: {policy_data.get('classification', 'Unknown')}
-- Compliance Score: {policy_data.get('compliance_score', 0)}%
-- Confidence: {policy_data.get('confidence', 0) * 100:.1f}%
-
-Analysis Summary:
-{policy_data.get('explanation', 'No explanation available')}
-
-Violations Found: {len(policy_data.get('violations', []))}
-"""
-    
-    if policy_data.get('violations'):
-        context += "\nKey Violations:\n"
-        for i, violation in enumerate(policy_data['violations'][:3], 1):
-            context += f"{i}. [{violation.get('severity', 'UNKNOWN')}] {violation.get('description', 'No description')}\n"
-    
-    if policy_data.get('recommendations'):
-        context += "\nRecommendations:\n"
-        for i, rec in enumerate(policy_data['recommendations'][:3], 1):
-            context += f"{i}. {rec}\n"
-    
-    context += f"\nUser Question: {message}\n"
-    context += "\nProvide a clear, accurate response based on the policy analysis above."
-    
-    return context
-
-
-async def _generate_fallback_response(
-    message: str,
-    policy_data: Optional[Dict[str, Any]]
-) -> str:
-    """Generate fallback response if LLaMA is unavailable."""
-    
-    message_lower = message.lower()
-    
-    # Question about violations
-    if any(word in message_lower for word in ['violation', 'violate', 'issue', 'problem']):
-        if not policy_data:
-            return "I don't have information about a specific policy. Please upload a policy first to analyze violations."
-        
-        violations = policy_data.get('violations', [])
-        if not violations:
-            return "Great news! No violations were found in this policy. It appears to be compliant with IRDAI regulations."
-        
-        response = f"The analysis found {len(violations)} violation(s) in this policy:\n\n"
-        for i, v in enumerate(violations[:5], 1):
-            response += f"{i}. **{v.get('severity', 'UNKNOWN')} - {v.get('type', 'Unknown Type')}**\n"
-            response += f"   {v.get('description', 'No description available')}\n"
-            response += f"   Regulation: {v.get('regulation_reference', 'N/A')}\n\n"
-        
-        return response
-    
-    # Question about compliance
-    if any(word in message_lower for word in ['compliant', 'compliance', 'status']):
-        if not policy_data:
-            return "Please upload a policy to check its compliance status."
-        
-        classification = policy_data.get('classification', 'UNKNOWN')
-        score = policy_data.get('compliance_score', 0)
-        
-        return f"""This policy is classified as **{classification}** with a compliance score of **{score}%**.
-
-{policy_data.get('explanation', 'No detailed explanation available.')}"""
-    
-    # Question about recommendations
-    if any(word in message_lower for word in ['recommend', 'fix', 'improve', 'should']):
-        if not policy_data:
-            return "Upload a policy to get personalized recommendations."
-        
-        recommendations = policy_data.get('recommendations', [])
-        if not recommendations:
-            return "No specific recommendations needed. The policy appears to be in good standing."
-        
-        response = "Here are the recommended actions to improve compliance:\n\n"
-        for i, rec in enumerate(recommendations, 1):
-            response += f"{i}. {rec}\n"
-        
-        return response
-    
-    # Question about regulations
-    if any(word in message_lower for word in ['regulation', 'irdai', 'rule', 'law']):
-        if policy_data and policy_data.get('rag_metadata', {}).get('top_sources'):
-            sources = policy_data['rag_metadata']['top_sources']
-            response = f"This policy was analyzed against {len(sources)} IRDAI regulations:\n\n"
-            for i, source in enumerate(sources[:5], 1):
-                response += f"{i}. {source}\n"
-            return response
-        
-        return """IRDAI (Insurance Regulatory and Development Authority of India) regulations govern insurance policies in India. 
-The system analyzes policies against 203+ regulations including coverage requirements, disclosure norms, and customer protection guidelines."""
-    
-    # Default response
-    if policy_data:
-        return f"""I'm here to help you understand this policy analysis. The policy "{policy_data.get('filename', 'Unknown')}" 
-has been classified as **{policy_data.get('classification', 'UNKNOWN')}** with a compliance score of **{policy_data.get('compliance_score', 0)}%**.
-
-You can ask me about:
-- Violations found
-- Compliance status
-- Recommendations for improvement
-- IRDAI regulations applied
-- Specific sections or concerns
-
-What would you like to know?"""
-    
-    return """Hello! I'm your AI compliance assistant. I can help you understand:
-
-- Policy compliance analysis
-- IRDAI regulations
-- Violations and how to fix them
-- Compliance best practices
-
-Please upload a policy to get started, or ask me a specific question about insurance compliance."""
 
 
 @router.post("/chat/session")

@@ -153,3 +153,10 @@ frontend-nextjs/yarn-debug.log*
 frontend-nextjs/yarn-error.log*
 frontend-nextjs/.pnpm-debug.log*
 frontend-nextjs/next-env.d.ts
+
+#md files
+*.md
+*.txt
+*.pdf
+*.docx
+*.csv

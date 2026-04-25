@@ -61,22 +61,32 @@ async def upload_document(
         # Ensure upload directory exists
         settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         
-        # Save uploaded file
+        # Save uploaded file with streaming size check
         file_path = settings.UPLOAD_DIR / f"{document_id}{file_ext}"
         
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        # Get file size
-        file_size = file_path.stat().st_size
-        
-        # Validate file size
-        if file_size > settings.MAX_FILE_SIZE:
-            file_path.unlink()  # Delete the file
-            raise HTTPException(
-                status_code=400,
-                detail=f"File too large: {file_size} bytes. Maximum: {settings.MAX_FILE_SIZE} bytes"
-            )
+        # Stream file to disk with size limit enforcement
+        file_size = 0
+        chunk_size = 1024 * 1024  # 1MB chunks
+        try:
+            with open(file_path, "wb") as buffer:
+                while True:
+                    chunk = await file.read(chunk_size)
+                    if not chunk:
+                        break
+                    file_size += len(chunk)
+                    if file_size > settings.MAX_FILE_SIZE:
+                        buffer.close()
+                        file_path.unlink(missing_ok=True)
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"File too large. Maximum: {settings.MAX_FILE_SIZE // (1024*1024)}MB"
+                        )
+                    buffer.write(chunk)
+        except HTTPException:
+            raise
+        except Exception as e:
+            file_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
         
         # Parse metadata if provided
         import json

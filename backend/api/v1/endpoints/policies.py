@@ -11,6 +11,7 @@ from datetime import datetime
 import shutil
 
 from app.core import get_logger
+from app.core.config import settings
 from app.services.compliance_service import ComplianceService
 from app.db import get_supabase_service
 from ...dependencies import get_compliance_service
@@ -115,8 +116,8 @@ async def upload_policy(
         # Generate policy ID
         policy_id = str(uuid4())
         
-        # Save uploaded file
-        upload_dir = Path("data/uploads")
+        # Save uploaded file using absolute path from settings
+        upload_dir = settings.UPLOAD_DIR
         upload_dir.mkdir(parents=True, exist_ok=True)
         
         file_path = upload_dir / f"{policy_id}.pdf"
@@ -260,15 +261,15 @@ async def get_all_policies():
     try:
         policies = await db.get_all_policies()
         
-        # Format for frontend
+        # Format for frontend with safe column access
         policies_list = [
             {
-                "id": policy["id"],
-                "filename": policy["filename"],
-                "status": policy["classification"],
-                "uploadedAt": policy["uploaded_at"],
-                "lastAnalyzed": policy["last_analyzed_at"],
-                "score": policy["compliance_score"]
+                "id": policy.get("id", ""),
+                "filename": policy.get("filename", "Unknown"),
+                "status": policy.get("classification", "REQUIRES_REVIEW"),
+                "uploadedAt": policy.get("uploaded_at", policy.get("created_at", None)),
+                "lastAnalyzed": policy.get("last_analyzed_at", policy.get("updated_at", None)),
+                "score": policy.get("compliance_score", 0)
             }
             for policy in policies
         ]

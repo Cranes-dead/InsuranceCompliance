@@ -25,7 +25,40 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 # In-memory batch status tracking (use Redis in production)
-batch_status_store = {}
+# Bounded to prevent unbounded memory growth
+MAX_BATCH_STORE_SIZE = 1000
+batch_status_store: Dict[str, dict] = {}
+
+
+def _store_batch_status(batch_id: str, data: dict) -> None:
+    """Store batch status with automatic eviction of old completed entries."""
+    if len(batch_status_store) >= MAX_BATCH_STORE_SIZE:
+        # Evict oldest completed/failed batches first
+        completed_ids = [
+            bid for bid, bdata in batch_status_store.items()
+            if bdata.get("status") in ("completed", "failed", "cancelled")
+        ]
+        # Sort by created_at and remove oldest half
+        completed_ids.sort(
+            key=lambda bid: batch_status_store[bid].get("created_at", ""),
+        )
+        for bid in completed_ids[:len(completed_ids) // 2 + 1]:
+            del batch_status_store[bid]
+        
+        if len(batch_status_store) >= MAX_BATCH_STORE_SIZE:
+            # Still full — evict oldest regardless of status
+            oldest_id = min(
+                batch_status_store,
+                key=lambda bid: batch_status_store[bid].get("created_at", "")
+            )
+            del batch_status_store[oldest_id]
+        
+        logger.warning(
+            f"Batch store evicted old entries (was {MAX_BATCH_STORE_SIZE}). "
+            "Consider using Redis for production batch tracking."
+        )
+    
+    batch_status_store[batch_id] = data
 
 
 @router.post("/analyze", response_model=ComplianceAnalysisResponse)
@@ -86,10 +119,11 @@ async def start_batch_analysis(
             "completed_documents": 0,
             "failed_documents": 0,
             "results": [],
-            "errors": []
+            "errors": [],
+            "created_at": datetime.now().isoformat()
         }
         
-        batch_status_store[batch_id] = batch_status
+        _store_batch_status(batch_id, batch_status)
         
         # Start background processing
         background_tasks.add_task(
@@ -206,25 +240,9 @@ async def cancel_batch_analysis(batch_id: str):
     return {"message": f"Batch {batch_id} cancelled successfully"}
 
 
-@router.get("/statistics")
-async def get_compliance_statistics(
-    compliance_service: ComplianceService = Depends(get_compliance_service)
-):
-    """
-    Get compliance statistics and trends.
-    
-    Returns aggregated compliance metrics for dashboard display.
-    """
-    try:
-        stats = await compliance_service.get_compliance_statistics()
-        return stats
-        
-    except Exception as e:
-        logger.error(f"Failed to get compliance statistics: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get statistics: {str(e)}"
-        )
+# NOTE: Statistics endpoint has been removed from this router.
+# Use GET /api/v1/statistics (in policies router) for real database-backed stats.
+
 
 
 async def _process_batch_analysis(

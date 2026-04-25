@@ -149,7 +149,7 @@ class Phase2ComplianceEngine:
         if not state_dict_path.exists():
             raise FileNotFoundError(f"Missing model weights at {state_dict_path}")
 
-        state_dict = torch.load(state_dict_path, map_location=self._device)
+        state_dict = torch.load(state_dict_path, map_location=self._device, weights_only=True)
         self._model.load_state_dict(state_dict)
         self._model.to(self._device)
         self._model.eval()
@@ -193,80 +193,54 @@ class Phase2ComplianceEngine:
         self, classification: str, confidence: float, probability_map: Dict[str, float]
     ) -> Dict[str, Any]:
         explanations = {
-            "COMPLIANT": "This document appears to meet IRDAI motor vehicle insurance compliance requirements.",
-            "NON_COMPLIANT": "This document appears to have compliance violations that need to be addressed.",
+            "COMPLIANT": "This document appears to meet IRDAI motor vehicle insurance compliance requirements based on classifier analysis.",
+            "NON_COMPLIANT": "This document appears to have compliance violations that need to be addressed. Use RAG+LLaMA analysis for detailed findings.",
             "REQUIRES_REVIEW": "This document contains elements that require manual review for compliance assessment.",
         }
 
-        violation_confidence = confidence
-
-        mandatory_compliance = [
-            {
-                "rule": "Third Party Liability Coverage",
-                "compliant": classification == "COMPLIANT",
-                "found_amount": 1500000,
-                "required_amount": 1500000,
-                "issue": None
-                if classification == "COMPLIANT"
-                else "Coverage should meet IRDAI minimum requirements",
-            },
-            {
-                "rule": "Personal Accident Cover for Owner-Driver",
-                "compliant": classification == "COMPLIANT",
-                "found_amount": 1500000,
-                "required_amount": 1500000,
-                "issue": None
-                if classification == "COMPLIANT"
-                else "Verify personal accident cover inclusion",
-            },
-        ]
-
+        # Note: The Phase2 classifier can only predict classification labels.
+        # It cannot extract specific violations, amounts, or regulation references.
+        # Detailed violation analysis requires the RAG+LLaMA pipeline.
+        mandatory_compliance: List[Dict[str, Any]] = []
         recommendations: List[str] = []
         violations: List[Dict[str, Any]] = []
 
         if classification == "NON_COMPLIANT":
             recommendations = [
-                "Ensure third-party liability coverage meets IRDAI minimum requirements",
-                "Verify personal accident cover for owner-driver is included",
-            ]
-            violations = [
-                {
-                    "type": ViolationType.COVERAGE_ISSUE,
-                    "severity": ViolationSeverity.HIGH,
-                    "description": "Third-party liability coverage may be insufficient",
-                    "regulation_reference": "IRDAI Motor Insurance Guidelines",
-                    "suggested_action": "Increase third-party liability coverage to mandated limits",
-                    "confidence": violation_confidence,
-                },
-                {
-                    "type": ViolationType.POLICY_INCONSISTENCY,
-                    "severity": ViolationSeverity.HIGH,
-                    "description": "Personal accident cover verification required",
-                    "regulation_reference": "Motor Vehicles Act",
-                    "suggested_action": "Ensure personal accident cover for owner-driver is present",
-                    "confidence": violation_confidence,
-                },
-            ]
-        elif classification == "REQUIRES_REVIEW":
-            recommendations = [
-                "Manual review required for complete compliance assessment",
-                "Check all mandatory coverage amounts",
+                "Run full RAG+LLaMA analysis for detailed violation breakdown",
+                "Review policy against IRDAI motor vehicle insurance guidelines",
+                "Verify all mandatory coverage amounts meet regulatory minimums",
             ]
             violations = [
                 {
                     "type": ViolationType.POLICY_INCONSISTENCY,
                     "severity": ViolationSeverity.MEDIUM,
-                    "description": "Policy requires manual compliance review",
+                    "description": "Classifier detected non-compliance. Run detailed analysis for specifics.",
+                    "regulation_reference": "IRDAI Motor Insurance Guidelines",
+                    "suggested_action": "Submit for full RAG+LLaMA analysis to identify specific violations",
+                    "confidence": confidence,
+                }
+            ]
+        elif classification == "REQUIRES_REVIEW":
+            recommendations = [
+                "Manual review required for complete compliance assessment",
+                "Run full RAG+LLaMA analysis for detailed findings",
+            ]
+            violations = [
+                {
+                    "type": ViolationType.POLICY_INCONSISTENCY,
+                    "severity": ViolationSeverity.LOW,
+                    "description": "Classifier confidence is insufficient for automated determination",
                     "regulation_reference": "IRDAI Guidelines",
-                    "suggested_action": "Conduct manual review to confirm compliance",
-                    "confidence": violation_confidence,
+                    "suggested_action": "Conduct manual review or run full RAG+LLaMA analysis",
+                    "confidence": confidence,
                 }
             ]
 
         return {
             "classification": classification,
             "confidence": confidence,
-            "compliance_score": round(confidence * 100, 1),  # Convert to percentage (0-100)
+            "compliance_score": round(confidence * 100, 1),
             "explanation": explanations.get(
                 classification, "Unable to determine compliance status"
             ),
@@ -274,4 +248,5 @@ class Phase2ComplianceEngine:
             "recommendations": recommendations,
             "violations": violations,
             "probabilities": probability_map,
+            "analysis_source": "phase2_classifier",
         }

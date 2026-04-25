@@ -305,21 +305,24 @@ class ComplianceService:
         self,
         document_ids: Optional[List[str]] = None
     ) -> Dict:
-        """Get compliance statistics for documents."""
-        # This would typically query a database
-        # For now, return mock statistics
-        return {
-            "total_documents": 100,
-            "compliant_count": 70,
-            "non_compliant_count": 20,
-            "requires_review_count": 10,
-            "compliance_rate": 70.0,
-            "average_confidence": 0.85,
-            "most_common_violations": [
-                {"type": "REGULATION_BREACH", "count": 15},
-                {"type": "POLICY_INCONSISTENCY", "count": 8},
-            ]
-        }
+        """Get compliance statistics for documents from the database."""
+        try:
+            from ..db import get_supabase_service
+            db = get_supabase_service()
+            stats = await db.get_statistics()
+            return stats
+        except Exception as e:
+            logger.error(f"Failed to get compliance statistics from database: {e}")
+            # Return empty stats structure on error rather than fake data
+            return {
+                "totalPolicies": 0,
+                "compliantPolicies": 0,
+                "nonCompliantPolicies": 0,
+                "reviewRequired": 0,
+                "averageScore": 0,
+                "recentAnalyses": [],
+                "error": str(e)
+            }
     
     def is_initialized(self) -> bool:
         """Check if service is initialized."""

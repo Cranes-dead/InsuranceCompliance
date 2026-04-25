@@ -72,14 +72,22 @@ class DocumentParser:
                 error_code="FILE_NOT_FOUND"
             )
         
-        # Determine file extension
-        extension = file_path_obj.suffix.lower()
+        # Determine file extension and convert to enum for reliable lookup
+        raw_extension = file_path_obj.suffix.lower()
+        try:
+            extension = FileExtension(raw_extension)
+        except ValueError:
+            raise DocumentProcessingError(
+                f"Unsupported file format: {raw_extension}",
+                error_code="UNSUPPORTED_FORMAT",
+                details={"supported_formats": [e.value for e in self._parsers.keys()]}
+            )
         
         if extension not in self._parsers:
             raise DocumentProcessingError(
-                f"Unsupported file format: {extension}",
-                error_code="UNSUPPORTED_FORMAT",
-                details={"supported_formats": list(self._parsers.keys())}
+                f"Parser not available for format: {raw_extension}",
+                error_code="PARSER_UNAVAILABLE",
+                details={"supported_formats": [e.value for e in self._parsers.keys()]}
             )
         
         try:
@@ -133,8 +141,7 @@ class DocumentParser:
             return "\n".join(text_content)
         
         # Run in thread pool to avoid blocking
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, _extract_text)
+        return await asyncio.to_thread(_extract_text)
     
     async def _parse_docx(self, file_path: Path) -> str:
         """Parse DOCX document using python-docx."""
@@ -149,8 +156,7 @@ class DocumentParser:
             return "\n".join(text_content)
         
         # Run in thread pool to avoid blocking
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, _extract_text)
+        return await asyncio.to_thread(_extract_text)
     
     async def _parse_txt(self, file_path: Path) -> str:
         """Parse plain text document."""

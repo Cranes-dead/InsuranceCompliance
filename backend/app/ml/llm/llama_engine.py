@@ -48,36 +48,52 @@ class OllamaProvider(LLMProvider):
         self.config = config
         self.base_url = config.base_url or "http://localhost:11434"
         self.model = config.model
+        self._client: Optional[httpx.AsyncClient] = None
+    
+    def _get_client(self) -> httpx.AsyncClient:
+        """Get or create the persistent HTTP client."""
+        if self._client is None or self._client.is_closed:
+            timeout = httpx.Timeout(
+                self.config.timeout,
+                connect=60.0,
+                read=self.config.timeout,
+                write=30.0
+            )
+            self._client = httpx.AsyncClient(timeout=timeout)
+        return self._client
         
     async def generate(self, prompt: str, temperature: float = 0.1) -> str:
         """Generate using Ollama API."""
         url = f"{self.base_url}/api/generate"
+        client = self._get_client()
         
-        # Set all timeout components to avoid default 120s limit
-        timeout = httpx.Timeout(self.config.timeout, connect=60.0, read=self.config.timeout, write=30.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            try:
-                response = await client.post(
-                    url,
-                    json={
-                        "model": self.model,
-                        "prompt": prompt,
-                        "temperature": temperature,
-                        "stream": False
-                    }
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result.get("response", "")
-                
-            except httpx.ConnectError:
-                raise RuntimeError(
-                    f"Cannot connect to Ollama at {self.base_url}. "
-                    "Make sure Ollama is running (ollama serve)"
-                )
-            except Exception as e:
-                logger.error(f"Ollama generation failed: {e}")
-                raise
+        try:
+            response = await client.post(
+                url,
+                json={
+                    "model": self.model,
+                    "prompt": prompt,
+                    "temperature": temperature,
+                    "stream": False
+                }
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result.get("response", "")
+            
+        except httpx.ConnectError:
+            raise RuntimeError(
+                f"Cannot connect to Ollama at {self.base_url}. "
+                "Make sure Ollama is running (ollama serve)"
+            )
+        except Exception as e:
+            logger.error(f"Ollama generation failed: {e}")
+            raise
+    
+    async def close(self) -> None:
+        """Close the HTTP client."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
 
 
 class GroqProvider(LLMProvider):
@@ -87,46 +103,62 @@ class GroqProvider(LLMProvider):
         self.config = config
         self.api_key = config.api_key or settings.GROQ_API_KEY
         self.model = config.model or "llama-3.1-70b-versatile"
+        self._client: Optional[httpx.AsyncClient] = None
         
         if not self.api_key:
             raise ValueError("Groq API key not configured")
     
+    def _get_client(self) -> httpx.AsyncClient:
+        """Get or create the persistent HTTP client."""
+        if self._client is None or self._client.is_closed:
+            timeout = httpx.Timeout(
+                self.config.timeout,
+                connect=30.0,
+                read=self.config.timeout,
+                write=30.0
+            )
+            self._client = httpx.AsyncClient(
+                timeout=timeout,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+            )
+        return self._client
+    
     async def generate(self, prompt: str, temperature: float = 0.1) -> str:
         """Generate using Groq API."""
         url = "https://api.groq.com/openai/v1/chat/completions"
+        client = self._get_client()
         
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        async with httpx.AsyncClient(timeout=self.config.timeout) as client:
-            try:
-                payload = {
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": temperature,
-                    "max_tokens": self.config.max_tokens
-                }
-                
-                response = await client.post(
-                    url,
-                    headers=headers,
-                    json=payload
-                )
-                
-                # Log error details for debugging
-                if response.status_code != 200:
-                    error_detail = response.text
-                    logger.error(f"Groq API error ({response.status_code}): {error_detail}")
-                
-                response.raise_for_status()
-                result = response.json()
-                return result["choices"][0]["message"]["content"]
-                
-            except Exception as e:
-                logger.error(f"Groq generation failed: {e}")
-                raise
+        try:
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+                "max_tokens": self.config.max_tokens
+            }
+            
+            response = await client.post(url, json=payload)
+            
+            # Log error details for debugging
+            if response.status_code != 200:
+                error_detail = response.text
+                logger.error(f"Groq API error ({response.status_code}): {error_detail}")
+            
+            response.raise_for_status()
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
+            
+        except Exception as e:
+            logger.error(f"Groq generation failed: {e}")
+            raise
+    
+    async def close(self) -> None:
+        """Close the HTTP client."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+
 
 
 class LLaMAComplianceEngine:
@@ -172,6 +204,27 @@ class LLaMAComplianceEngine:
             logger.error(f"❌ Failed to initialize LLM: {e}")
             raise
     
+    async def _parse_json_response(self, response: str) -> Optional[Dict[str, Any]]:
+        """Attempt to parse a JSON response from the LLM.
+        
+        Handles common LLM output patterns like markdown code blocks.
+        Returns None if parsing fails (caller should handle retry/fallback).
+        """
+        try:
+            json_str = response.strip()
+            
+            # Handle markdown code blocks
+            if "```json" in json_str:
+                json_str = json_str.split("```json")[1].split("```")[0].strip()
+            elif "```" in json_str:
+                json_str = json_str.split("```")[1].split("```")[0].strip()
+            
+            return json.loads(json_str)
+            
+        except (json.JSONDecodeError, IndexError, ValueError) as e:
+            logger.debug(f"JSON parse failed: {e}. Raw (first 300 chars): {response[:300]}")
+            return None
+    
     async def analyze_compliance(
         self,
         policy_text: str,
@@ -207,16 +260,9 @@ class LLaMAComplianceEngine:
         )
         
         # Parse JSON response
-        try:
-            # Extract JSON from response (handle markdown code blocks)
-            json_str = response.strip()
-            if "```json" in json_str:
-                json_str = json_str.split("```json")[1].split("```")[0].strip()
-            elif "```" in json_str:
-                json_str = json_str.split("```")[1].split("```")[0].strip()
-            
-            result = json.loads(json_str)
-            
+        result = await self._parse_json_response(response)
+        
+        if result is not None:
             # Post-process: Ensure recommendations are strings (LLaMA sometimes returns dicts)
             if "recommendations" in result and isinstance(result["recommendations"], list):
                 processed_recommendations = []
@@ -230,22 +276,45 @@ class LLaMAComplianceEngine:
             
             logger.info(f"✅ Analysis complete: {result.get('classification')}")
             return result
+        
+        # LOGIC-03 FIX: Retry with a JSON repair prompt instead of silently returning 0%
+        logger.warning("First JSON parse failed, attempting repair prompt...")
+        repair_prompt = (
+            "Your previous response was not valid JSON. Please fix it.\n"
+            "Return ONLY a valid JSON object with these fields:\n"
+            "- classification: one of COMPLIANT, NON_COMPLIANT, REQUIRES_REVIEW\n"
+            "- confidence: float between 0 and 1\n"
+            "- compliance_score: float between 0 and 100\n"
+            "- explanation: string\n"
+            "- violations: array of objects\n"
+            "- recommendations: array of strings\n\n"
+            f"Your original (broken) response was:\n{response[:1500]}\n\n"
+            "Return ONLY the corrected JSON, no markdown, no explanation."
+        )
+        
+        try:
+            retry_response = await self.provider.generate(repair_prompt, temperature=0.0)
+            retry_result = await self._parse_json_response(retry_response)
             
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLaMA response as JSON: {e}")
-            logger.debug(f"Raw response: {response[:500]}")
-            
-            # Fallback: return raw response with error
-            return {
-                "classification": "REQUIRES_REVIEW",
-                "confidence": 0.0,
-                "compliance_score": 0.0,
-                "explanation": f"LLM analysis completed but response parsing failed. Raw: {response[:500]}",
-                "violations": [],
-                "mandatory_compliance": [],
-                "recommendations": ["Review the policy manually - automated analysis inconclusive"],
-                "error": str(e)
-            }
+            if retry_result is not None:
+                logger.info(f"✅ Repair prompt succeeded: {retry_result.get('classification')}")
+                return retry_result
+        except Exception as retry_err:
+            logger.warning(f"Repair prompt also failed: {retry_err}")
+        
+        # Final fallback with visible error indication
+        logger.error("Both original and repair JSON parsing failed")
+        return {
+            "classification": "REQUIRES_REVIEW",
+            "confidence": 0.3,
+            "compliance_score": 0.0,
+            "explanation": "LLM analysis completed but response could not be parsed as structured JSON after retry.",
+            "violations": [],
+            "mandatory_compliance": [],
+            "recommendations": ["Review the policy manually - automated analysis was inconclusive"],
+            "parse_error": True,
+            "raw_excerpt": response[:300]
+        }
     
     async def chat(
         self,
@@ -319,13 +388,19 @@ class LLaMAComplianceEngine:
                 json_str = json_str.split("```json")[1].split("```")[0].strip()
             
             return json.loads(json_str)
-        except:
+        except (json.JSONDecodeError, ValueError, IndexError) as e:
+            logger.warning(f"Failed to parse section analysis JSON: {e}")
             return {
                 "section_compliant": None,
                 "issues": [response],
                 "missing_elements": [],
                 "recommendations": []
             }
+    
+    async def close(self) -> None:
+        """Close the provider's HTTP client for clean shutdown."""
+        if hasattr(self.provider, 'close'):
+            await self.provider.close()
     
     def get_info(self) -> Dict[str, Any]:
         """Get information about the engine configuration."""

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, validator
 from pydantic_settings import BaseSettings
 from pathlib import Path
+from dotenv import load_dotenv
 import os
 
 
@@ -15,6 +16,9 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 DATA_ROOT = BACKEND_ROOT / "data"
 MODELS_ROOT = BACKEND_ROOT / "models"
 UPLOADS_ROOT = DATA_ROOT / "uploads"
+
+# Load .env into os.environ so os.getenv() works everywhere
+load_dotenv(BACKEND_ROOT / ".env", override=False)
 
 
 class Settings(BaseSettings):
@@ -111,6 +115,11 @@ class Settings(BaseSettings):
     # Cache Configuration  
     REDIS_URL: Optional[str] = None
     CACHE_TTL: int = 3600  # 1 hour
+    
+    # Phase 4: Security Configuration
+    API_KEYS: Optional[str] = None  # Comma-separated API keys, None = auth disabled
+    RATE_LIMIT_MAX: int = 100  # Max requests per window per IP
+    RATE_LIMIT_WINDOW: int = 60  # Rate limit window in seconds
     
     model_config = {
         "env_file": str(BACKEND_ROOT / ".env"),

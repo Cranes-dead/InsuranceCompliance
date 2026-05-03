@@ -1,6 +1,16 @@
-"""Prompt templates for LLaMA compliance reasoning."""
+"""Prompt templates for LLaMA compliance reasoning.
 
-from typing import List, Dict, Any
+Phase 3: Enhanced with PromptBuilder-based methods (build_*) alongside
+the original static methods for backward compatibility.
+"""
+
+from typing import List, Dict, Any, Optional
+
+from .prompt_builder import (
+    PromptBuilder,
+    CLASSIFICATION_SCHEMA,
+    SECTION_ANALYSIS_SCHEMA,
+)
 
 
 class PromptTemplates:
@@ -219,3 +229,132 @@ Create a concise summary (around {max_length} words) that captures:
 6. Any unusual or noteworthy clauses
 
 Focus on information relevant to regulatory compliance analysis."""
+
+    # ── Phase 3: PromptBuilder-based methods ────────────────────────────
+    # These use token-aware budget allocation instead of fixed [:4000] cutoffs.
+    # The original static methods above are preserved for backward compatibility.
+
+    @classmethod
+    def build_classification_prompt(
+        cls,
+        policy_text: str,
+        regulations: str,
+        policy_metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Build a token-aware classification prompt using PromptBuilder.
+        
+        Replaces the fixed [:4000] truncation in classification_prompt()
+        with dynamic budget allocation across sections.
+        
+        Args:
+            policy_text: Full policy document text
+            regulations: Retrieved relevant regulations (formatted)
+            policy_metadata: Optional metadata (filename, type, etc.)
+            
+        Returns:
+            Formatted prompt string
+        """
+        builder = (
+            PromptBuilder()
+            .set_system_role("compliance_analyst")
+            .add_policy_text(policy_text, budget_pct=0.4)
+            .add_regulations(regulations, budget_pct=0.3)
+        )
+        
+        if policy_metadata:
+            builder.add_metadata(policy_metadata)
+        
+        builder.add_task_instructions(
+            "ANALYSIS TASK:\n"
+            "Analyze this policy against the regulations. Check:\n"
+            "1. Coverage Requirements - Are all mandatory coverages included with proper limits?\n"
+            "2. Exclusions - Are there any invalid exclusions or violations?\n"
+            "3. Terms & Conditions - Are clauses clear and regulatory-compliant?\n\n"
+            "CLASSIFICATION:\n"
+            "- COMPLIANT: Fully meets regulations\n"
+            "- NON_COMPLIANT: Clear violations exist\n"
+            "- REQUIRES_REVIEW: Ambiguous or needs human review"
+        )
+        
+        builder.set_output_format(CLASSIFICATION_SCHEMA)
+        
+        return builder.build()
+
+    @classmethod
+    def build_chat_prompt(
+        cls,
+        user_query: str,
+        analysis_results: Dict[str, Any],
+        chat_history: List[Dict[str, str]],
+        policy_excerpt: str = ""
+    ) -> str:
+        """Build a token-aware chat prompt using PromptBuilder.
+        
+        Args:
+            user_query: User's question
+            analysis_results: Previous compliance analysis results
+            chat_history: List of previous messages
+            policy_excerpt: Optional relevant policy excerpt
+            
+        Returns:
+            Formatted prompt string
+        """
+        builder = (
+            PromptBuilder()
+            .set_system_role("chat_advisor")
+            .add_analysis_context(analysis_results)
+            .add_chat_history(chat_history)
+        )
+        
+        if policy_excerpt:
+            builder.add_policy_text(policy_excerpt, budget_pct=0.2)
+        
+        builder.add_task_instructions(
+            f"USER QUESTION:\n{user_query}\n\n"
+            "Provide a clear, helpful answer that:\n"
+            "1. Directly addresses the user's question\n"
+            "2. References specific findings from the analysis\n"
+            "3. Cites relevant regulations when appropriate\n"
+            "4. Offers practical guidance or next steps\n"
+            "5. Uses plain language suitable for non-experts\n\n"
+            "Keep your response concise but thorough."
+        )
+        
+        return builder.build()
+
+    @classmethod
+    def build_section_analysis_prompt(
+        cls,
+        section_text: str,
+        section_type: str,
+        regulations: str
+    ) -> str:
+        """Build a token-aware section analysis prompt using PromptBuilder.
+        
+        Args:
+            section_text: Text of the policy section
+            section_type: Type of section (coverage, exclusions, etc.)
+            regulations: Relevant regulations for this section
+            
+        Returns:
+            Formatted prompt string
+        """
+        builder = (
+            PromptBuilder()
+            .set_system_role("compliance_analyst")
+            .add_policy_text(section_text, budget_pct=0.4)
+            .add_regulations(regulations, budget_pct=0.3)
+        )
+        
+        builder.add_task_instructions(
+            f"SECTION TYPE: {section_type.upper()}\n\n"
+            "Provide a focused analysis of this section, identifying:\n"
+            "1. Whether this section meets regulatory requirements\n"
+            "2. Any specific violations or concerns\n"
+            "3. Missing required elements\n"
+            "4. Ambiguous or problematic language"
+        )
+        
+        builder.set_output_format(SECTION_ANALYSIS_SCHEMA)
+        
+        return builder.build()

@@ -68,14 +68,29 @@ def create_app() -> FastAPI:
         lifespan=lifespan
     )
     
-    # CORS middleware for Next.js frontend
+    # CORS middleware for Next.js frontend (must be outermost)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.BACKEND_CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
     )
+    
+    # Phase 4: Rate limiting middleware (after CORS)
+    from .middleware.rate_limiter import RateLimiterMiddleware
+    app.add_middleware(
+        RateLimiterMiddleware,
+        max_requests=settings.RATE_LIMIT_MAX,
+        window_seconds=settings.RATE_LIMIT_WINDOW,
+    )
+    
+    # Phase 4: Optional API key authentication (after rate limiter)
+    from .middleware.auth_middleware import APIKeyMiddleware
+    api_keys = None
+    if settings.API_KEYS:
+        api_keys = {k.strip() for k in settings.API_KEYS.split(",") if k.strip()}
+    app.add_middleware(APIKeyMiddleware, api_keys=api_keys or None)
     
     # Request timing middleware
     @app.middleware("http")

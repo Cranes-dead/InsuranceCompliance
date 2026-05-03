@@ -244,8 +244,8 @@ class LLaMAComplianceEngine:
         if not self._initialized:
             await self.initialize()
         
-        # Generate prompt
-        prompt = self.templates.classification_prompt(
+        # Generate prompt (Phase 3: token-aware PromptBuilder)
+        prompt = self.templates.build_classification_prompt(
             policy_text=policy_text,
             regulations=regulations,
             policy_metadata=policy_metadata

@@ -43,9 +43,22 @@ async def lifespan(app: FastAPI):
         logger.error(f"API startup failed: {e}")
         raise
     
+    # Phase 1: Start scheduler for automated scraping
+    scheduler = None
+    try:
+        from app.services.scheduler import SchedulerService
+        from api.v1.endpoints.scraper_admin import set_scheduler_service
+        scheduler = SchedulerService()
+        await scheduler.start()
+        set_scheduler_service(scheduler)
+    except Exception as e:
+        logger.warning(f"⚠️ Scheduler startup failed (scraping disabled): {e}")
+    
     yield
     
     # Shutdown
+    if scheduler:
+        await scheduler.shutdown()
     logger.info("Shutting down API...")
 
 

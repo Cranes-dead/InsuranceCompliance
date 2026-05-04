@@ -156,6 +156,10 @@ def setup_logging() -> None:
     logging.getLogger("transformers").setLevel(logging.WARNING)
     logging.getLogger("torch").setLevel(logging.WARNING)
     logging.getLogger("sklearn").setLevel(logging.WARNING)
+    # Suppress httpx/httpcore — they log every Supabase request URL at INFO level,
+    # which leaks the Supabase project URL into logs
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def _apply_request_id_filter() -> None:

@@ -52,6 +52,8 @@ pytest>=7.4.0
 httpx>=0.25.0
 aiohttp>=3.9.0  # Async HTTP client for Ollama
 psutil>=5.9.0  # System resource monitoring for health endpoint
+apscheduler>=3.10.0  # Scheduled scraping (Phase 1)
+redis>=5.0.0  # Cache backend when REDIS_URL is set (Phase 5)
 
 # Database
 supabase>=2.0.0

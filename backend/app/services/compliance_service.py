@@ -5,6 +5,8 @@ import traceback
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from ..services.cache_service import CacheService
+
 from ..core import get_logger
 from ..core.exceptions import (
     ComplianceSystemException,
@@ -41,6 +43,8 @@ class ComplianceService:
         self.rag_llama_service = RAGLLaMAComplianceService()
         # Fallback: Phase 2 classifier (if RAG+LLaMA unavailable)
         self.phase2_engine = Phase2ComplianceEngine()
+        # Phase 5: Content-hash cache (Redis or in-memory)
+        self.cache = CacheService()
         self._initialized = False
         self._use_rag_llama = True  # Default to RAG+LLaMA
         
@@ -114,8 +118,21 @@ class ComplianceService:
             # Parse document
             document_content = await self._parse_document(document_path)
             
-            # Perform compliance analysis (pass document_path for metadata)
-            analysis_result = await self._analyze_compliance(document_content, document_path)
+            # Phase 5: Check cache before running expensive LLM analysis
+            cache_key = self.cache.make_document_key(document_content)
+            cached_result = await self.cache.get(cache_key)
+            if cached_result is not None:
+                logger.info(f"⚡ Cache HIT for document {document_id} — skipping LLM")
+                analysis_result = cached_result
+            else:
+                # Perform compliance analysis (pass document_path for metadata)
+                analysis_result = await self._analyze_compliance(document_content, document_path)
+                
+                # Cache the result (skip REQUIRES_REVIEW — LLM was uncertain, retry may improve)
+                classification = analysis_result.get("classification", "")
+                if classification != "REQUIRES_REVIEW":
+                    await self.cache.set(cache_key, analysis_result)
+                    logger.info(f"💾 Cached analysis result for document {document_id}")
 
             explanation = analysis_result.get("explanation") if include_explanation else None
             

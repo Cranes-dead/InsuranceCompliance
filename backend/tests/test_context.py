@@ -4,9 +4,11 @@ Unit tests for context.py (Phase 6).
 Tests request correlation ID via contextvars.
 """
 
-import pytest
 import asyncio
-from app.core.context import get_request_id, set_request_id, request_id_var
+
+import pytest
+
+from app.core.context import get_request_id, request_id_var, set_request_id
 
 
 class TestRequestContext:

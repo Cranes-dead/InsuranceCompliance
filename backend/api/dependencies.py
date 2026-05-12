@@ -4,7 +4,9 @@ Breaks circular imports by providing a central location for dependencies.
 """
 
 from typing import Optional
+
 from fastapi import HTTPException
+
 from app.services.compliance_service import ComplianceService
 
 # Global service instance

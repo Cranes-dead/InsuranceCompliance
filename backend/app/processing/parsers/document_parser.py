@@ -5,7 +5,8 @@ Refactored from the original document_parser.py to follow best practices.
 
 import asyncio
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 import aiofiles
 
 from ...core import get_logger
@@ -18,34 +19,34 @@ logger = get_logger(__name__)
 class DocumentParser:
     """
     Unified document parser supporting multiple file formats.
-    
+
     This parser handles PDF, TXT, and DOCX files and provides
     asynchronous processing for better performance.
     """
-    
+
     def __init__(self):
         """Initialize the document parser."""
         self._parsers = {}
         self._initialize_parsers()
-    
+
     def _initialize_parsers(self):
         """Initialize format-specific parsers."""
         try:
             # Import parsers dynamically to handle missing dependencies gracefully
-            import pdfplumber
+            import pdfplumber  # noqa: F401 — availability check
             self._parsers[FileExtension.PDF] = self._parse_pdf
         except ImportError:
             logger.warning("pdfplumber not available - PDF parsing disabled")
-        
+
         try:
-            from docx import Document
+            from docx import Document  # noqa: F401 — availability check
             self._parsers[FileExtension.DOCX] = self._parse_docx
         except ImportError:
             logger.warning("python-docx not available - DOCX parsing disabled")
-        
+
         # Text files are always supported
         self._parsers[FileExtension.TXT] = self._parse_txt
-    
+
     async def parse(
         self,
         file_path: str,
@@ -53,25 +54,25 @@ class DocumentParser:
     ) -> str:
         """
         Parse document and extract text content.
-        
+
         Args:
             file_path: Path to the document file
             document_type: Optional document type hint
-            
+
         Returns:
             Extracted text content
-            
+
         Raises:
             DocumentProcessingError: If parsing fails
         """
         file_path_obj = Path(file_path)
-        
+
         if not file_path_obj.exists():
             raise DocumentProcessingError(
                 f"Document file not found: {file_path}",
                 error_code="FILE_NOT_FOUND"
             )
-        
+
         # Determine file extension and convert to enum for reliable lookup
         raw_extension = file_path_obj.suffix.lower()
         try:
@@ -82,27 +83,27 @@ class DocumentParser:
                 error_code="UNSUPPORTED_FORMAT",
                 details={"supported_formats": [e.value for e in self._parsers.keys()]}
             )
-        
+
         if extension not in self._parsers:
             raise DocumentProcessingError(
                 f"Parser not available for format: {raw_extension}",
                 error_code="PARSER_UNAVAILABLE",
                 details={"supported_formats": [e.value for e in self._parsers.keys()]}
             )
-        
+
         try:
             logger.info(f"Parsing document: {file_path}")
-            
+
             # Parse document using appropriate parser
             parser_func = self._parsers[extension]
             content = await parser_func(file_path_obj)
-            
+
             if not content or not content.strip():
                 raise DocumentProcessingError(
                     "Document appears to be empty or unreadable",
                     error_code="EMPTY_DOCUMENT"
                 )
-            
+
             # Validate minimum content length
             MIN_DOCUMENT_LENGTH = 100  # characters
             content_stripped = content.strip()
@@ -113,10 +114,10 @@ class DocumentParser:
                     error_code="INSUFFICIENT_CONTENT",
                     details={"content_length": len(content_stripped), "minimum_required": MIN_DOCUMENT_LENGTH}
                 )
-            
+
             logger.info(f"Successfully parsed document: {file_path} ({len(content)} characters)")
             return content_stripped
-            
+
         except DocumentProcessingError:
             raise
         except Exception as e:
@@ -126,11 +127,11 @@ class DocumentParser:
                 error_code="PARSE_ERROR",
                 details={"error": str(e), "file_path": str(file_path)}
             )
-    
+
     async def _parse_pdf(self, file_path: Path) -> str:
         """Parse PDF document using pdfplumber."""
         import pdfplumber
-        
+
         def _extract_text():
             text_content = []
             with pdfplumber.open(file_path) as pdf:
@@ -139,14 +140,14 @@ class DocumentParser:
                     if page_text:
                         text_content.append(page_text)
             return "\n".join(text_content)
-        
+
         # Run in thread pool to avoid blocking
         return await asyncio.to_thread(_extract_text)
-    
+
     async def _parse_docx(self, file_path: Path) -> str:
         """Parse DOCX document using python-docx."""
         from docx import Document
-        
+
         def _extract_text():
             doc = Document(str(file_path))  # Convert Path to string
             text_content = []
@@ -154,10 +155,10 @@ class DocumentParser:
                 if paragraph.text.strip():
                     text_content.append(paragraph.text)
             return "\n".join(text_content)
-        
+
         # Run in thread pool to avoid blocking
         return await asyncio.to_thread(_extract_text)
-    
+
     async def _parse_txt(self, file_path: Path) -> str:
         """Parse plain text document."""
         try:
@@ -167,11 +168,11 @@ class DocumentParser:
             # Try with different encoding
             async with aiofiles.open(file_path, 'r', encoding='latin-1') as file:
                 return await file.read()
-    
+
     def get_supported_formats(self) -> list:
         """Get list of supported file formats."""
         return list(self._parsers.keys())
-    
+
     async def validate_document(
         self,
         file_path: str,
@@ -179,29 +180,29 @@ class DocumentParser:
     ) -> Dict[str, Any]:
         """
         Validate document before parsing.
-        
+
         Args:
             file_path: Path to the document file
             max_size: Maximum allowed file size in bytes
-            
+
         Returns:
             Dictionary with validation results
         """
         file_path_obj = Path(file_path)
-        
+
         validation_result = {
             "valid": True,
             "errors": [],
             "warnings": [],
             "file_info": {}
         }
-        
+
         # Check if file exists
         if not file_path_obj.exists():
             validation_result["valid"] = False
             validation_result["errors"].append("File does not exist")
             return validation_result
-        
+
         # Get file info
         stat = file_path_obj.stat()
         validation_result["file_info"] = {
@@ -209,16 +210,16 @@ class DocumentParser:
             "extension": file_path_obj.suffix.lower(),
             "name": file_path_obj.name
         }
-        
+
         # Check file size
         if max_size and stat.st_size > max_size:
             validation_result["valid"] = False
             validation_result["errors"].append(f"File too large: {stat.st_size} bytes")
-        
+
         # Check format support
         extension = file_path_obj.suffix.lower()
         if extension not in self._parsers:
             validation_result["valid"] = False
             validation_result["errors"].append(f"Unsupported format: {extension}")
-        
+
         return validation_result

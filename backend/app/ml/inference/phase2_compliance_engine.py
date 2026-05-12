@@ -16,8 +16,8 @@ import torch
 import torch.nn as nn
 from transformers import AutoModel, AutoTokenizer
 
-from app.models.enums import ComplianceClassification, ViolationSeverity, ViolationType
 from app.core.config import settings
+from app.models.enums import ComplianceClassification, ViolationSeverity, ViolationType
 
 logger = logging.getLogger(__name__)
 

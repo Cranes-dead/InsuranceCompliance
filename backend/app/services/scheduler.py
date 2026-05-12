@@ -17,18 +17,18 @@ logger = get_logger(__name__)
 
 class SchedulerService:
     """APScheduler service managing scheduled regulation scrapes.
-    
+
     Usage in FastAPI lifespan:
         scheduler = SchedulerService()
         await scheduler.start()
         yield
         await scheduler.shutdown()
     """
-    
+
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
         self.scraper_service = ScraperService()
-    
+
     async def start(self) -> None:
         """Start the scheduler with configured jobs."""
         self.scheduler.add_job(
@@ -41,7 +41,7 @@ class SchedulerService:
         )
         self.scheduler.start()
         logger.info("📅 Scheduler started — daily regulation scrape at 02:00 AM")
-    
+
     async def shutdown(self) -> None:
         """Gracefully shutdown the scheduler."""
         if self.scheduler.running:

@@ -7,7 +7,7 @@ that allow unit tests to run without heavy ML/DB dependencies.
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -20,7 +20,7 @@ if str(BACKEND_ROOT) not in sys.path:
 @pytest.fixture(scope="session", autouse=True)
 def mock_heavy_imports():
     """Mock heavy ML/DB imports so tests run without GPU or DB.
-    
+
     This patches torch, transformers, etc. at the module level so
     that importing app.ml.* doesn't fail in CI.
     """
@@ -38,9 +38,9 @@ def mock_heavy_imports():
         if mod_name not in sys.modules:
             mocks[mod_name] = MagicMock()
             sys.modules[mod_name] = mocks[mod_name]
-    
+
     yield
-    
+
     # Cleanup (optional — session-scoped so only at exit)
     for mod_name in mocks:
         sys.modules.pop(mod_name, None)

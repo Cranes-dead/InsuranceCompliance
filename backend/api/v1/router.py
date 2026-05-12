@@ -4,7 +4,7 @@ API v1 router that combines all endpoint routers.
 
 from fastapi import APIRouter
 
-from .endpoints import compliance, documents, health, policies, chat, scraper_admin
+from .endpoints import chat, compliance, documents, health, policies, scraper_admin
 
 api_router = APIRouter()
 

@@ -4,18 +4,18 @@ Phase 3: Enhanced with PromptBuilder-based methods (build_*) alongside
 the original static methods for backward compatibility.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from .prompt_builder import (
-    PromptBuilder,
     CLASSIFICATION_SCHEMA,
     SECTION_ANALYSIS_SCHEMA,
+    PromptBuilder,
 )
 
 
 class PromptTemplates:
     """Centralized prompt templates for LLaMA interactions."""
-    
+
     @staticmethod
     def classification_prompt(
         policy_text: str,
@@ -23,12 +23,12 @@ class PromptTemplates:
         policy_metadata: Dict[str, Any] = None
     ) -> str:
         """Generate prompt for compliance classification task.
-        
+
         Args:
             policy_text: Full or summarized policy text
             regulations: Retrieved relevant regulations (formatted)
             policy_metadata: Optional metadata (file name, type, etc.)
-            
+
         Returns:
             Formatted prompt string
         """
@@ -40,13 +40,13 @@ POLICY METADATA:
 - Document Type: {policy_metadata.get('type', 'Insurance Policy')}
 - Analysis Date: {policy_metadata.get('date', 'Not specified')}
 """
-        
+
         return f"""You are an expert insurance compliance analyst specializing in Indian motor vehicle insurance regulations. Your task is to analyze insurance policies for compliance with regulatory requirements set by IRDAI and MoRTH.
 
 {metadata_section}
 
 POLICY TEXT:
-{policy_text[:4000]}  
+{policy_text[:4000]}
 
 RELEVANT REGULATIONS:
 {regulations}
@@ -99,13 +99,13 @@ Provide your analysis in valid JSON format only. Be thorough, cite specific regu
         policy_excerpt: str = ""
     ) -> str:
         """Generate prompt for conversational Q&A about analysis.
-        
+
         Args:
             user_query: User's question
             analysis_results: Previous compliance analysis results
             chat_history: List of previous messages
             policy_excerpt: Optional relevant policy excerpt
-            
+
         Returns:
             Formatted prompt string
         """
@@ -118,27 +118,27 @@ Provide your analysis in valid JSON format only. Be thorough, cite specific regu
                 content = msg.get('content', '')
                 history_text += f"{role.upper()}: {content}\n"
             history_text += "\n"
-        
+
         # Format analysis results
         classification = analysis_results.get('classification', 'UNKNOWN')
         confidence = analysis_results.get('confidence', 0.0)
         violations = analysis_results.get('violations', [])
         explanation = analysis_results.get('explanation', 'No analysis available')
-        
+
         violations_text = ""
         if violations:
             violations_text = "KEY VIOLATIONS FOUND:\n"
             for i, v in enumerate(violations[:5], 1):  # Top 5 violations
                 violations_text += f"{i}. [{v.get('severity')}] {v.get('description')}\n"
             violations_text += "\n"
-        
+
         policy_section = ""
         if policy_excerpt:
             policy_section = f"""
 RELEVANT POLICY EXCERPT:
 {policy_excerpt}
 """
-        
+
         return f"""You are an expert insurance compliance advisor helping users understand policy compliance analysis results.
 
 PREVIOUS ANALYSIS RESULTS:
@@ -171,12 +171,12 @@ Keep your response concise but thorough. If you reference a violation or require
         regulations: str
     ) -> str:
         """Generate prompt for analyzing a specific policy section.
-        
+
         Args:
             section_text: Text of the policy section
             section_type: Type of section (coverage, exclusions, etc.)
             regulations: Relevant regulations for this section
-            
+
         Returns:
             Formatted prompt string
         """
@@ -207,11 +207,11 @@ Output as JSON with structure:
     @staticmethod
     def summarization_prompt(policy_text: str, max_length: int = 1000) -> str:
         """Generate prompt for policy summarization (for long documents).
-        
+
         Args:
             policy_text: Full policy text
             max_length: Target summary length in words
-            
+
         Returns:
             Formatted prompt string
         """
@@ -242,15 +242,15 @@ Focus on information relevant to regulatory compliance analysis."""
         policy_metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """Build a token-aware classification prompt using PromptBuilder.
-        
+
         Replaces the fixed [:4000] truncation in classification_prompt()
         with dynamic budget allocation across sections.
-        
+
         Args:
             policy_text: Full policy document text
             regulations: Retrieved relevant regulations (formatted)
             policy_metadata: Optional metadata (filename, type, etc.)
-            
+
         Returns:
             Formatted prompt string
         """
@@ -260,10 +260,10 @@ Focus on information relevant to regulatory compliance analysis."""
             .add_policy_text(policy_text, budget_pct=0.4)
             .add_regulations(regulations, budget_pct=0.3)
         )
-        
+
         if policy_metadata:
             builder.add_metadata(policy_metadata)
-        
+
         builder.add_task_instructions(
             "ANALYSIS TASK:\n"
             "Analyze this policy against the regulations. Check:\n"
@@ -275,9 +275,9 @@ Focus on information relevant to regulatory compliance analysis."""
             "- NON_COMPLIANT: Clear violations exist\n"
             "- REQUIRES_REVIEW: Ambiguous or needs human review"
         )
-        
+
         builder.set_output_format(CLASSIFICATION_SCHEMA)
-        
+
         return builder.build()
 
     @classmethod
@@ -289,13 +289,13 @@ Focus on information relevant to regulatory compliance analysis."""
         policy_excerpt: str = ""
     ) -> str:
         """Build a token-aware chat prompt using PromptBuilder.
-        
+
         Args:
             user_query: User's question
             analysis_results: Previous compliance analysis results
             chat_history: List of previous messages
             policy_excerpt: Optional relevant policy excerpt
-            
+
         Returns:
             Formatted prompt string
         """
@@ -305,10 +305,10 @@ Focus on information relevant to regulatory compliance analysis."""
             .add_analysis_context(analysis_results)
             .add_chat_history(chat_history)
         )
-        
+
         if policy_excerpt:
             builder.add_policy_text(policy_excerpt, budget_pct=0.2)
-        
+
         builder.add_task_instructions(
             f"USER QUESTION:\n{user_query}\n\n"
             "Provide a clear, helpful answer that:\n"
@@ -319,7 +319,7 @@ Focus on information relevant to regulatory compliance analysis."""
             "5. Uses plain language suitable for non-experts\n\n"
             "Keep your response concise but thorough."
         )
-        
+
         return builder.build()
 
     @classmethod
@@ -330,12 +330,12 @@ Focus on information relevant to regulatory compliance analysis."""
         regulations: str
     ) -> str:
         """Build a token-aware section analysis prompt using PromptBuilder.
-        
+
         Args:
             section_text: Text of the policy section
             section_type: Type of section (coverage, exclusions, etc.)
             regulations: Relevant regulations for this section
-            
+
         Returns:
             Formatted prompt string
         """
@@ -345,7 +345,7 @@ Focus on information relevant to regulatory compliance analysis."""
             .add_policy_text(section_text, budget_pct=0.4)
             .add_regulations(regulations, budget_pct=0.3)
         )
-        
+
         builder.add_task_instructions(
             f"SECTION TYPE: {section_type.upper()}\n\n"
             "Provide a focused analysis of this section, identifying:\n"
@@ -354,7 +354,7 @@ Focus on information relevant to regulatory compliance analysis."""
             "3. Missing required elements\n"
             "4. Ambiguous or problematic language"
         )
-        
+
         builder.set_output_format(SECTION_ANALYSIS_SCHEMA)
-        
+
         return builder.build()

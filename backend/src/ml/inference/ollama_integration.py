@@ -3,19 +3,19 @@ Mock Ollama integration for Advanced AI Service.
 This would be the actual Ollama integration in a full implementation.
 """
 
-from typing import Dict, List, Any
 import logging
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
 
 class ComplianceExplainer:
     """Mock Ollama compliance explainer."""
-    
+
     def __init__(self):
         self.model_name = "llama2"
         logger.info("Mock ComplianceExplainer initialized")
-    
+
     async def explain_compliance(
         self,
         policy_text: str,
@@ -24,7 +24,7 @@ class ComplianceExplainer:
     ) -> str:
         """Generate compliance explanation."""
         return f"This policy was classified as {classification} with {confidence:.1%} confidence based on regulatory analysis."
-    
+
     async def identify_violations(self, content: str) -> Dict[str, List[Dict]]:
         """Identify violations in content."""
         return {
@@ -38,10 +38,10 @@ class ComplianceExplainer:
                 }
             ]
         }
-    
+
     async def generate_recommendations(
-        self, 
-        content: str, 
+        self,
+        content: str,
         classification: str
     ) -> Dict[str, List[str]]:
         """Generate recommendations."""
@@ -56,11 +56,11 @@ class ComplianceExplainer:
 
 class ComplianceQA:
     """Mock Ollama QA system."""
-    
+
     def __init__(self):
         self.model_name = "llama2"
         logger.info("Mock ComplianceQA initialized")
-    
+
     async def answer_question(
         self,
         question: str,

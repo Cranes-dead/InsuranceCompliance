@@ -1,13 +1,14 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship, sessionmaker
 
 Base = declarative_base()
 
 class Document(Base):
     __tablename__ = "documents"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)
@@ -15,13 +16,13 @@ class Document(Base):
     upload_timestamp = Column(DateTime, default=datetime.utcnow)
     file_size = Column(Integer)
     status = Column(String(20), default="uploaded")
-    
+
     # Relationship
     compliance_results = relationship("ComplianceResult", back_populates="document")
 
 class ComplianceResult(Base):
     __tablename__ = "compliance_results"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("documents.id"))
     classification = Column(String(50), nullable=False)
@@ -30,13 +31,13 @@ class ComplianceResult(Base):
     recommendations = Column(Text)
     explanation = Column(Text)
     analysis_timestamp = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationship
     document = relationship("Document", back_populates="compliance_results")
 
 class IRDAIGuideline(Base):
     __tablename__ = "irdai_guidelines"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     guideline_id = Column(String(100), unique=True, nullable=False)
     title = Column(String(500), nullable=False)

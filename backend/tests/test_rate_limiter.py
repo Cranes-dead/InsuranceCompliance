@@ -5,13 +5,10 @@ Tests the sliding window algorithm and IP extraction without
 starting a full ASGI server.
 """
 
-import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock
-from starlette.testclient import TestClient
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
+from starlette.testclient import TestClient
 
 from api.middleware.rate_limiter import RateLimiterMiddleware
 

@@ -1,18 +1,12 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from fastapi.responses import JSONResponse
-import os
-import uuid
-from pathlib import Path
-from datetime import datetime
 import logging
+import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import List
 
-from ..models.schemas import (
-    DocumentUploadResponse, 
-    DocumentInfo,
-    DocumentType,
-    ErrorResponse
-)
+from fastapi import APIRouter, File, HTTPException, UploadFile
+
+from ..models.schemas import DocumentInfo, DocumentType, DocumentUploadResponse
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +29,14 @@ def validate_file(file: UploadFile) -> bool:
             status_code=400,
             detail=f"File type {file_ext} not allowed. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
         )
-    
+
     # Check file size (this is approximate from headers)
     if hasattr(file, 'size') and file.size and file.size > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
             detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE // (1024*1024)}MB"
         )
-    
+
     return True
 
 @router.post("/upload", response_model=DocumentUploadResponse)
@@ -51,33 +45,33 @@ async def upload_document(file: UploadFile = File(...)):
     try:
         # Validate file
         validate_file(file)
-        
+
         # Generate unique document ID
         document_id = str(uuid.uuid4())
-        
+
         # Create safe filename
         original_name = file.filename
         file_ext = Path(original_name).suffix
         safe_filename = f"{document_id}{file_ext}"
         file_path = UPLOAD_DIR / safe_filename
-        
+
         # Save file
         content = await file.read()
-        
+
         # Check actual file size
         if len(content) > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=400,
                 detail=f"File size {len(content)} exceeds maximum allowed size of {MAX_FILE_SIZE}"
             )
-        
+
         with open(file_path, "wb") as f:
             f.write(content)
-        
+
         # TODO: Save document metadata to database
-        
+
         logger.info(f"Document uploaded: {document_id}, file: {original_name}")
-        
+
         return DocumentUploadResponse(
             document_id=document_id,
             filename=original_name,
@@ -85,7 +79,7 @@ async def upload_document(file: UploadFile = File(...)):
             status="uploaded",
             upload_timestamp=datetime.utcnow()
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -101,10 +95,10 @@ async def get_document_info(document_id: str):
         files = list(UPLOAD_DIR.glob(f"{document_id}.*"))
         if not files:
             raise HTTPException(status_code=404, detail="Document not found")
-        
+
         file_path = files[0]
         stat = file_path.stat()
-        
+
         return DocumentInfo(
             document_id=document_id,
             filename=file_path.name,
@@ -113,7 +107,7 @@ async def get_document_info(document_id: str):
             upload_timestamp=datetime.fromtimestamp(stat.st_ctime),
             status="uploaded"
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -125,12 +119,12 @@ async def list_documents():
     """List all uploaded documents"""
     try:
         documents = []
-        
+
         for file_path in UPLOAD_DIR.glob("*"):
             if file_path.is_file():
                 document_id = file_path.stem
                 stat = file_path.stat()
-                
+
                 documents.append(DocumentInfo(
                     document_id=document_id,
                     filename=file_path.name,
@@ -139,9 +133,9 @@ async def list_documents():
                     upload_timestamp=datetime.fromtimestamp(stat.st_ctime),
                     status="uploaded"
                 ))
-        
+
         return documents
-        
+
     except Exception as e:
         logger.error(f"Error listing documents: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -153,16 +147,16 @@ async def delete_document(document_id: str):
         files = list(UPLOAD_DIR.glob(f"{document_id}.*"))
         if not files:
             raise HTTPException(status_code=404, detail="Document not found")
-        
+
         file_path = files[0]
         file_path.unlink()
-        
+
         # TODO: Remove from database
-        
+
         logger.info(f"Document deleted: {document_id}")
-        
+
         return {"message": f"Document {document_id} deleted successfully"}
-        
+
     except HTTPException:
         raise
     except Exception as e:

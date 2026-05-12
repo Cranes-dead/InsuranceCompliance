@@ -13,10 +13,9 @@ Usage:
         .build())
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
-
 
 # Approximate tokens-per-word ratio for English text
 TOKENS_PER_WORD = 1.3
@@ -83,21 +82,21 @@ SECTION_ANALYSIS_SCHEMA = """{
 
 class PromptBuilder:
     """Fluent API for building token-aware prompts.
-    
+
     Dynamically allocates token budgets across prompt sections and uses
     intelligent truncation strategies to maximize information density.
-    
+
     Each prompt section is stored with a sort key (01_, 02_, etc.) to ensure
     deterministic ordering in the final assembled prompt.
     """
-    
+
     def __init__(
         self,
         max_tokens: Optional[int] = None,
         output_reserve: int = 512
     ):
         """Initialize the prompt builder.
-        
+
         Args:
             max_tokens: Total token budget. Defaults to settings.LLM_MAX_TOKENS.
             output_reserve: Tokens reserved for the model's response.
@@ -109,38 +108,38 @@ class PromptBuilder:
         )
         self._sections: Dict[str, str] = {}
         self._used_words = 0
-    
+
     # ── Truncation Strategies ───────────────────────────────────────────
-    
+
     def _truncate_head_tail(self, text: str, budget_words: int) -> str:
         """Truncate text keeping head and tail sections.
-        
+
         Proven in LOGIC-01: policy heads contain type/coverage/definitions,
         tails contain terms/compliance clauses/signatures. The middle is
         usually boilerplate that adds less value.
-        
+
         Args:
             text: Full text to truncate.
             budget_words: Maximum words allowed.
-            
+
         Returns:
             Truncated text with head + "[...omitted...]" + tail.
         """
         words = text.split()
         if len(words) <= budget_words:
             return text
-        
+
         head_budget = int(budget_words * 0.65)
         tail_budget = budget_words - head_budget
-        
+
         head = " ".join(words[:head_budget])
         tail = " ".join(words[-tail_budget:])
-        
+
         return f"{head}\n\n[... middle section omitted for brevity ...]\n\n{tail}"
-    
+
     def _truncate_simple(self, text: str, budget_words: int) -> str:
         """Simple truncation keeping the beginning of the text.
-        
+
         Used for regulations (ordered by relevance) and system text
         where the most important content is at the start.
         """
@@ -148,19 +147,19 @@ class PromptBuilder:
         if len(words) <= budget_words:
             return text
         return " ".join(words[:budget_words]) + "\n[... truncated ...]"
-    
+
     def _remaining_budget(self) -> int:
         """Words remaining in the budget."""
         return max(0, self._max_input_words - self._used_words)
-    
+
     # ── Builder Methods ─────────────────────────────────────────────────
-    
+
     def set_system_role(self, role: str = "compliance_analyst") -> "PromptBuilder":
         """Set the system role preamble.
-        
+
         Args:
             role: Key from ROLE_TEMPLATES, or a custom role string.
-            
+
         Returns:
             self for chaining.
         """
@@ -168,18 +167,18 @@ class PromptBuilder:
         self._sections["01_system"] = preamble
         self._used_words += len(preamble.split())
         return self
-    
+
     def add_policy_text(
         self,
         text: str,
         budget_pct: float = 0.4
     ) -> "PromptBuilder":
         """Add policy text with head+tail truncation.
-        
+
         Args:
             text: Full policy document text.
             budget_pct: Fraction of total input budget to allocate (0.0-1.0).
-            
+
         Returns:
             self for chaining.
         """
@@ -188,26 +187,26 @@ class PromptBuilder:
         self._sections["02_policy"] = f"POLICY TEXT:\n{truncated}"
         self._used_words += len(truncated.split()) + 2  # +2 for header
         return self
-    
+
     def add_regulations(
         self,
         regulations: "str | List[Dict[str, Any]]",
         budget_pct: float = 0.3
     ) -> "PromptBuilder":
         """Add retrieved regulations with budget-aware truncation.
-        
+
         Accepts either pre-formatted text or a list of regulation dicts
         (as returned by the retriever).
-        
+
         Args:
             regulations: Formatted regulation text or list of regulation dicts.
             budget_pct: Fraction of total input budget to allocate.
-            
+
         Returns:
             self for chaining.
         """
         budget = int(self._max_input_words * budget_pct)
-        
+
         if isinstance(regulations, list):
             reg_text = "\n".join(
                 f"- [{r.get('metadata', {}).get('source', 'UNKNOWN')}] {r.get('text', '')}"
@@ -215,12 +214,12 @@ class PromptBuilder:
             )
         else:
             reg_text = regulations
-        
+
         truncated = self._truncate_simple(reg_text, budget)
         self._sections["03_regulations"] = f"RELEVANT REGULATIONS:\n{truncated}"
         self._used_words += len(truncated.split()) + 2
         return self
-    
+
     def add_chat_history(
         self,
         messages: List[Dict[str, str]],
@@ -228,20 +227,20 @@ class PromptBuilder:
         max_messages: int = 5
     ) -> "PromptBuilder":
         """Add chat history (most recent first, budget-aware).
-        
+
         Keeps as many recent messages as fit within the budget.
-        
+
         Args:
             messages: List of {"role": ..., "content": ...} dicts.
             budget_pct: Fraction of total input budget to allocate.
             max_messages: Maximum number of messages to include.
-            
+
         Returns:
             self for chaining.
         """
         budget = int(self._max_input_words * budget_pct)
         recent = messages[-max_messages:]
-        
+
         history_lines = []
         used = 0
         for msg in recent:
@@ -251,24 +250,24 @@ class PromptBuilder:
                 break
             history_lines.append(line)
             used += line_words
-        
+
         if history_lines:
             self._sections["04_history"] = (
                 "CONVERSATION HISTORY:\n" + "\n".join(history_lines)
             )
             self._used_words += used + 2
-        
+
         return self
-    
+
     def add_analysis_context(
         self,
         analysis: Dict[str, Any]
     ) -> "PromptBuilder":
         """Add previous analysis results as context (for chat prompts).
-        
+
         Args:
             analysis: Previous compliance analysis result dict.
-            
+
         Returns:
             self for chaining.
         """
@@ -276,14 +275,14 @@ class PromptBuilder:
         confidence = analysis.get("confidence", 0.0)
         explanation = analysis.get("explanation", "No analysis available")
         violations = analysis.get("violations", [])
-        
+
         parts = [
             "PREVIOUS ANALYSIS RESULTS:",
             f"- Classification: {classification}",
             f"- Confidence: {confidence:.1%}",
             f"\nANALYSIS EXPLANATION:\n{explanation[:500]}",
         ]
-        
+
         if violations:
             parts.append("\nKEY VIOLATIONS FOUND:")
             for i, v in enumerate(violations[:5], 1):
@@ -291,21 +290,21 @@ class PromptBuilder:
                     f"  {i}. [{v.get('severity', 'UNKNOWN')}] "
                     f"{v.get('description', 'No description')}"
                 )
-        
+
         context = "\n".join(parts)
         self._sections["05_analysis"] = context
         self._used_words += len(context.split())
         return self
-    
+
     def add_metadata(
         self,
         metadata: Dict[str, Any]
     ) -> "PromptBuilder":
         """Add policy metadata section.
-        
+
         Args:
             metadata: Dict with keys like 'filename', 'type', 'date'.
-            
+
         Returns:
             self for chaining.
         """
@@ -318,29 +317,29 @@ class PromptBuilder:
         self._sections["02a_metadata"] = meta_text
         self._used_words += len(meta_text.split())
         return self
-    
+
     def add_task_instructions(self, instructions: str) -> "PromptBuilder":
         """Add custom task-specific instructions.
-        
+
         Args:
             instructions: Free-form instruction text.
-            
+
         Returns:
             self for chaining.
         """
         self._sections["06_task"] = instructions
         self._used_words += len(instructions.split())
         return self
-    
+
     def set_output_format(
         self,
         schema: str = CLASSIFICATION_SCHEMA
     ) -> "PromptBuilder":
         """Set the expected output JSON format.
-        
+
         Args:
             schema: JSON schema string showing expected output structure.
-            
+
         Returns:
             self for chaining.
         """
@@ -354,24 +353,24 @@ class PromptBuilder:
         self._sections["07_output"] = section
         self._used_words += len(section.split())
         return self
-    
+
     # ── Build & Inspect ─────────────────────────────────────────────────
-    
+
     def build(self) -> str:
         """Assemble the final prompt from all sections.
-        
+
         Sections are ordered by their sort key (01_system, 02_policy, etc.)
         to ensure deterministic output.
-        
+
         Returns:
             Complete prompt string.
         """
         ordered = sorted(self._sections.items(), key=lambda x: x[0])
         return "\n\n".join(content for _, content in ordered)
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get prompt composition statistics for debugging.
-        
+
         Returns:
             Dict with token budget usage, section list, and estimates.
         """

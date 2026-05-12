@@ -1,6 +1,6 @@
 import asyncio
-from pathlib import Path
 import sys
+from pathlib import Path
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -8,6 +8,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.ml.inference.simple_compliance_engine import SimpleComplianceEngine
 from app.processing.parsers.document_parser import DocumentParser
+
 SAMPLE_PATH = BACKEND_ROOT / "test_samples" / "sample_policy_compliant.pdf"
 
 

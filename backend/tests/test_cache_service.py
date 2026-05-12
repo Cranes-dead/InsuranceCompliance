@@ -4,8 +4,10 @@ Unit tests for CacheService (Phase 5).
 Tests the in-memory backend without Redis dependency.
 """
 
-import pytest
 import asyncio
+
+import pytest
+
 from app.services.cache_service import CacheService, InMemoryCacheBackend
 
 
@@ -49,10 +51,10 @@ class TestInMemoryCacheBackend:
         """When at max_size, oldest entry is evicted on insert."""
         for i in range(5):
             await cache.set(f"key{i}", {"i": i}, ttl=3600)
-        
+
         # Cache is full (5 items). Insert one more.
         await cache.set("key_new", {"new": True}, ttl=3600)
-        
+
         # Should still work (one was evicted)
         assert await cache.get("key_new") == {"new": True}
         # Total should not exceed max_size

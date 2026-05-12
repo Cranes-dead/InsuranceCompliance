@@ -3,26 +3,27 @@ Pydantic schemas for API requests and responses.
 Next.js friendly with proper JSON serialization.
 """
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
-from uuid import UUID, uuid4
+from typing import Any, Dict, List, Optional, Union
+from uuid import uuid4
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .enums import (
+    AnalysisType,
+    BatchStatus,
     ComplianceClassification,
     DocumentType,
-    AnalysisType,
     ProcessingStatus,
-    BatchStatus,
+    ViolationSeverity,
     ViolationType,
-    ViolationSeverity
 )
 
 
 # Base Schemas
 class BaseSchema(BaseModel):
     """Base schema with common configuration."""
-    
+
     # QUALITY-01: Pydantic V2 style configuration (replaces deprecated inner Config class)
     model_config = ConfigDict(
         # Allow using enums by value
@@ -65,11 +66,11 @@ class ComplianceAnalysisRequest(BaseSchema):
     """Schema for compliance analysis request."""
     document_id: str = Field(..., description="Document ID to analyze")
     analysis_type: AnalysisType = Field(
-        AnalysisType.FULL, 
+        AnalysisType.FULL,
         description="Type of analysis to perform"
     )
     include_explanation: bool = Field(
-        True, 
+        True,
         description="Whether to include AI-generated explanations"
     )
     custom_rules: Optional[List[str]] = Field(
@@ -93,8 +94,8 @@ class ViolationDetail(BaseSchema):
         description="Recommended action to resolve violation"
     )
     confidence: float = Field(
-        ..., 
-        ge=0.0, 
+        ...,
+        ge=0.0,
         le=1.0,
         description="Confidence score for this violation"
     )
@@ -128,14 +129,14 @@ class ComplianceAnalysisResponse(BaseSchema):
 class BatchAnalysisRequest(BaseSchema):
     """Schema for batch analysis request."""
     document_ids: List[str] = Field(
-        ..., 
+        ...,
         description="List of document IDs to analyze"
     )
     analysis_type: AnalysisType = AnalysisType.FULL
     include_explanation: bool = True
     custom_rules: Optional[List[str]] = None
     priority: Optional[str] = Field("normal", description="Batch processing priority")
-    
+
     @field_validator("document_ids")
     @classmethod
     def validate_unique_documents(cls, v):

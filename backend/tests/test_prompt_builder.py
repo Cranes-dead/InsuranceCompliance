@@ -4,8 +4,7 @@ Unit tests for PromptBuilder (Phase 3).
 Tests token budgeting, truncation strategies, and fluent API.
 """
 
-import pytest
-from app.ml.llm.prompt_builder import PromptBuilder, TOKENS_PER_WORD
+from app.ml.llm.prompt_builder import TOKENS_PER_WORD, PromptBuilder
 
 
 class TestPromptBuilderTruncation:

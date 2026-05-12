@@ -3,28 +3,27 @@ FastAPI application factory and main entry point.
 Next.js compatible API with proper CORS and error handling.
 """
 
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-import sys
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-import uvicorn
 import time
 from datetime import datetime
 
-from app.core import settings, get_logger
-from app.core.exceptions import ComplianceSystemException
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core import get_logger, settings
 from app.services.compliance_service import ComplianceService
-from .v1.router import api_router
+
+from .dependencies import get_compliance_service, set_compliance_service
 from .middleware.error_middleware import setup_error_handlers
-from .dependencies import set_compliance_service, get_compliance_service
+from .v1.router import api_router
 
 logger = get_logger(__name__)
 
@@ -42,20 +41,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"API startup failed: {e}")
         raise
-    
+
     # Phase 1: Start scheduler for automated scraping
     scheduler = None
     try:
-        from app.services.scheduler import SchedulerService
         from api.v1.endpoints.scraper_admin import set_scheduler_service
+        from app.services.scheduler import SchedulerService
         scheduler = SchedulerService()
         await scheduler.start()
         set_scheduler_service(scheduler)
     except Exception as e:
         logger.warning(f"⚠️ Scheduler startup failed (scraping disabled): {e}")
-    
+
     yield
-    
+
     # Shutdown
     if scheduler:
         await scheduler.shutdown()
@@ -65,11 +64,11 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """
     Create and configure FastAPI application.
-    
+
     Returns:
         Configured FastAPI app instance
     """
-    
+
     # Create FastAPI app with lifespan management
     app = FastAPI(
         title=settings.APP_NAME,
@@ -80,7 +79,7 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
         lifespan=lifespan
     )
-    
+
     # CORS middleware for Next.js frontend (must be outermost)
     app.add_middleware(
         CORSMiddleware,
@@ -89,7 +88,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
     )
-    
+
     # Phase 4: Rate limiting middleware (after CORS)
     from .middleware.rate_limiter import RateLimiterMiddleware
     app.add_middleware(
@@ -97,14 +96,14 @@ def create_app() -> FastAPI:
         max_requests=settings.RATE_LIMIT_MAX,
         window_seconds=settings.RATE_LIMIT_WINDOW,
     )
-    
+
     # Phase 4: Optional API key authentication (after rate limiter)
     from .middleware.auth_middleware import APIKeyMiddleware
     api_keys = None
     if settings.API_KEYS:
         api_keys = {k.strip() for k in settings.API_KEYS.split(",") if k.strip()}
     app.add_middleware(APIKeyMiddleware, api_keys=api_keys or None)
-    
+
     # Request timing middleware
     @app.middleware("http")
     async def add_process_time_header(request: Request, call_next):
@@ -113,7 +112,7 @@ def create_app() -> FastAPI:
         process_time = time.time() - start_time
         response.headers["X-Process-Time"] = str(process_time)
         return response
-    
+
     # Request ID middleware (Phase 6: UUID4 correlation IDs via contextvars)
     @app.middleware("http")
     async def add_request_id(request: Request, call_next):
@@ -123,13 +122,13 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response
-    
+
     # Setup error handlers
     setup_error_handlers(app)
-    
+
     # Include API router
     app.include_router(api_router, prefix=settings.API_PREFIX)
-    
+
     # Health check endpoint (outside versioned API)
     @app.get("/health")
     async def health_check():
@@ -139,7 +138,7 @@ def create_app() -> FastAPI:
             engine_status = "healthy" if service.is_initialized() else "unhealthy"
         except HTTPException:
             engine_status = "unhealthy"
-        
+
         return {
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat(),
@@ -148,7 +147,7 @@ def create_app() -> FastAPI:
                 "compliance_engine": engine_status
             }
         }
-    
+
     # Root endpoint
     @app.get("/")
     async def root():
@@ -160,7 +159,7 @@ def create_app() -> FastAPI:
             "health": "/health",
             "api": settings.API_PREFIX
         }
-    
+
     return app
 
 

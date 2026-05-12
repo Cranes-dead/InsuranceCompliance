@@ -2,10 +2,11 @@
 System health and monitoring endpoints.
 """
 
-from fastapi import APIRouter
-from datetime import datetime
-import psutil
 import asyncio
+from datetime import datetime
+
+import psutil
+from fastapi import APIRouter
 
 from app.core import get_logger, settings
 
@@ -18,19 +19,19 @@ router = APIRouter()
 async def health_check():
     """
     Comprehensive health check endpoint.
-    
+
     Returns system status, service health, and performance metrics.
     """
     try:
         # Check system resources
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
-        
+
         # Test async operations
         start_time = datetime.utcnow()
         await asyncio.sleep(0.001)  # Small async test
         response_time = (datetime.utcnow() - start_time).total_seconds()
-        
+
         health_data = {
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat(),
@@ -53,9 +54,9 @@ async def health_check():
                 "uptime": "N/A"  # This would track actual uptime
             }
         }
-        
+
         return health_data
-        
+
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {
@@ -69,24 +70,24 @@ async def health_check():
 async def get_system_metrics():
     """
     Get detailed system metrics for monitoring.
-    
+
     Returns performance and usage statistics.
     """
     try:
         # CPU metrics
         cpu_percent = psutil.cpu_percent(interval=1)
         cpu_count = psutil.cpu_count()
-        
+
         # Memory metrics
         memory = psutil.virtual_memory()
         swap = psutil.swap_memory()
-        
+
         # Disk metrics
         disk = psutil.disk_usage('/')
-        
+
         # Network metrics (basic)
         network = psutil.net_io_counters()
-        
+
         metrics = {
             "timestamp": datetime.utcnow().isoformat(),
             "cpu": {
@@ -119,9 +120,9 @@ async def get_system_metrics():
                 "packets_recv": network.packets_recv
             }
         }
-        
+
         return metrics
-        
+
     except Exception as e:
         logger.error(f"Failed to get metrics: {e}")
         return {
@@ -134,13 +135,13 @@ async def get_system_metrics():
 async def get_system_info():
     """
     Get system and application information.
-    
+
     Returns configuration and environment details.
     """
     try:
         import platform
         import sys
-        
+
         info = {
             "application": {
                 "name": settings.APP_NAME,
@@ -169,9 +170,9 @@ async def get_system_info():
                 "document_upload": True
             }
         }
-        
+
         return info
-        
+
     except Exception as e:
         logger.error(f"Failed to get system info: {e}")
         return {

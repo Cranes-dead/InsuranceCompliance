@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 class ComplianceSystemException(Exception):
     """Base exception class for the compliance system."""
-    
+
     def __init__(
         self,
         message: str,

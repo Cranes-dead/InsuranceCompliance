@@ -5,10 +5,12 @@ Tests each filtering stage independently
 
 import sys
 from pathlib import Path
+
 sys.path.append(str(Path(__file__).parent))
 
-from smart_scraper import SmartMotorVehicleScraper
 import logging
+
+from smart_scraper import SmartMotorVehicleScraper
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,10 +20,10 @@ def test_initialization():
     print("\n" + "="*80)
     print("TEST 1: Scraper Initialization")
     print("="*80)
-    
+
     try:
         scraper = SmartMotorVehicleScraper()
-        print(f"✅ Scraper initialized")
+        print("✅ Scraper initialized")
         print(f"   Output directory: {scraper.base_dir}")
         print(f"   BERT model: {'Loaded ✅' if scraper.bert_model else 'Not loaded ⚠️'}")
         print(f"   Device: {scraper.device}")
@@ -35,7 +37,7 @@ def test_url_filtering(scraper):
     print("\n" + "="*80)
     print("TEST 2: URL Filtering")
     print("="*80)
-    
+
     test_urls = [
         ("https://irdai.gov.in/motor-insurance-guidelines-2023.pdf", "Should pass ✅"),
         ("https://irdai.gov.in/motor-vehicle-tariff-rates.pdf", "Should pass ✅"),
@@ -43,7 +45,7 @@ def test_url_filtering(scraper):
         ("https://irdai.gov.in/health-insurance-newsletter.pdf", "Should fail ❌"),
         ("https://morth.nic.in/motor-vehicle-act-insurance.pdf", "Should pass ✅"),
     ]
-    
+
     for url, expected in test_urls:
         score = scraper.score_url(url)
         threshold = scraper.config['thresholds']['url_score']
@@ -56,7 +58,7 @@ def test_link_filtering(scraper):
     print("\n" + "="*80)
     print("TEST 3: Link Text Filtering")
     print("="*80)
-    
+
     test_links = [
         {
             'text': 'Motor Insurance Guidelines 2023',
@@ -83,7 +85,7 @@ def test_link_filtering(scraper):
             'expected': '❌'
         },
     ]
-    
+
     for link in test_links:
         score = scraper.calculate_relevance_score(link)
         threshold = scraper.config['thresholds']['link_score']
@@ -96,7 +98,7 @@ def test_blacklist(scraper):
     print("\n" + "="*80)
     print("TEST 4: Blacklist Filtering")
     print("="*80)
-    
+
     test_texts = [
         ("Motor Insurance Guidelines 2023", False, "Should pass ✅"),
         ("IRDAI Newsletter October 2023", True, "Should be blocked ❌"),
@@ -105,7 +107,7 @@ def test_blacklist(scraper):
         ("Motor Vehicle Insurance Tariff", False, "Should pass ✅"),
         ("Health Insurance Policy Updates", True, "Should be blocked ❌"),
     ]
-    
+
     for text, should_block, expected in test_texts:
         is_blocked = scraper.is_blacklisted(text)
         correct = is_blocked == should_block
@@ -118,11 +120,11 @@ def test_bert_classification(scraper):
     print("\n" + "="*80)
     print("TEST 5: BERT Classification")
     print("="*80)
-    
+
     if not scraper.config['enable_bert']:
         print("⚠️  BERT disabled, skipping test")
         return
-    
+
     test_texts = [
         (
             "Motor vehicle insurance third party liability coverage as per Motor Vehicles Act section 146. All motor vehicles must have valid insurance.",
@@ -141,9 +143,9 @@ def test_bert_classification(scraper):
             "Should fail ❌"
         ),
     ]
-    
+
     threshold = scraper.config['thresholds']['bert_confidence']
-    
+
     for text, expected in test_texts:
         score = scraper.calculate_bert_relevance(text[:200])
         passed = score >= threshold
@@ -155,23 +157,23 @@ def test_configuration(scraper):
     print("\n" + "="*80)
     print("TEST 6: Configuration")
     print("="*80)
-    
+
     print(f"📁 Output directory: {scraper.base_dir}")
     print(f"   Exists: {'Yes ✅' if scraper.base_dir.exists() else 'No ❌'}")
-    
-    print(f"\n🎯 Thresholds (Moderate):")
+
+    print("\n🎯 Thresholds (Moderate):")
     for key, value in scraper.config['thresholds'].items():
         print(f"   {key:25}: {value}")
-    
+
     print(f"\n🚫 Blacklist terms: {len(scraper.blacklist_terms)}")
     print(f"   Sample: {', '.join(scraper.blacklist_terms[:5])}")
-    
-    print(f"\n✅ Positive terms:")
+
+    print("\n✅ Positive terms:")
     print(f"   Primary: {len(scraper.positive_terms['primary'])} terms")
     print(f"   Secondary: {len(scraper.positive_terms['secondary'])} terms")
     print(f"   Tertiary: {len(scraper.positive_terms['tertiary'])} terms")
-    
-    print(f"\n🤖 BERT Configuration:")
+
+    print("\n🤖 BERT Configuration:")
     print(f"   Enabled: {scraper.config['enable_bert']}")
     if scraper.config['enable_bert']:
         print(f"   Model loaded: {'Yes ✅' if scraper.bert_model else 'No ❌'}")
@@ -183,20 +185,20 @@ def run_all_tests():
     print("\n" + "🧪"*40)
     print("SMART SCRAPER TEST SUITE")
     print("🧪"*40 + "\n")
-    
+
     # Test 1: Initialization
     scraper = test_initialization()
     if not scraper:
         print("\n❌ Cannot continue - initialization failed")
         return
-    
+
     # Test 2-6: Filtering stages
     test_url_filtering(scraper)
     test_link_filtering(scraper)
     test_blacklist(scraper)
     test_bert_classification(scraper)
     test_configuration(scraper)
-    
+
     # Summary
     print("\n" + "="*80)
     print("TEST SUMMARY")
@@ -210,7 +212,7 @@ def run_all_tests():
     else:
         print("⚠️  BERT disabled (scraper will still work at ~80% accuracy)")
     print("✅ Configuration loaded")
-    
+
     print("\n🎉 All tests completed!")
     print("\nNext step: Run the scraper:")
     print("  python smart_scraper.py")

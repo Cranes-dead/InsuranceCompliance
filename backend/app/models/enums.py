@@ -8,7 +8,7 @@ from enum import Enum
 class ComplianceClassification(str, Enum):
     """Compliance classification types."""
     COMPLIANT = "COMPLIANT"
-    NON_COMPLIANT = "NON_COMPLIANT" 
+    NON_COMPLIANT = "NON_COMPLIANT"
     REQUIRES_REVIEW = "REQUIRES_REVIEW"
 
 

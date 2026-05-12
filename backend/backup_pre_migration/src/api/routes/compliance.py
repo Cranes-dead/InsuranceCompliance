@@ -1,27 +1,27 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from typing import Dict, List
 import logging
-import asyncio
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
-import sys
-import os
+from typing import Dict, List
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 # Add project root to path for imports
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.append(str(project_root))
 
 from updated_compliance_system import RuleBasedComplianceEngine
+
 from src.processing.parsers.document_parser import parse_document
 
 from ..models.schemas import (
-    ComplianceAnalysisRequest,
-    ComplianceAnalysisResponse,
     BatchAnalysisRequest,
     BatchAnalysisResponse,
+    ComplianceAnalysisRequest,
+    ComplianceAnalysisResponse,
+    ComplianceClassification,
     ViolationDetail,
-    ComplianceClassification
 )
 
 logger = logging.getLogger(__name__)
@@ -45,32 +45,32 @@ async def analyze_document(document_id: str, analysis_type: str = "full") -> Com
     try:
         if not compliance_engine:
             raise HTTPException(status_code=503, detail="Compliance engine not available")
-        
+
         # Load document from storage
         upload_dir = Path("./data/uploads")
         document_files = list(upload_dir.glob(f"{document_id}.*"))
-        
+
         if not document_files:
             raise HTTPException(status_code=404, detail="Document not found")
-        
+
         document_path = document_files[0]
-        
+
         # Parse document content
         try:
             document_text = parse_document(str(document_path))
         except Exception as e:
             logger.error(f"Failed to parse document {document_id}: {e}")
             raise HTTPException(status_code=422, detail="Failed to parse document")
-        
+
         # Perform rule-based compliance analysis
         start_time = datetime.utcnow()
         analysis_result = compliance_engine.classify_policy_text(document_text)
         end_time = datetime.utcnow()
         processing_time = (end_time - start_time).total_seconds()
-        
+
         # Convert analysis result to API response format
         classification = ComplianceClassification(analysis_result['classification'])
-        
+
         # Convert violations to ViolationDetail objects
         violations = []
         for violation in analysis_result.get('violations', []):
@@ -81,7 +81,7 @@ async def analyze_document(document_id: str, analysis_type: str = "full") -> Com
                 regulation_reference="IRDAI Motor Insurance Regulations",
                 suggested_fix=violation.get('description', '')
             ))
-        
+
         # Add violations for failed mandatory requirements
         for req in analysis_result.get('mandatory_compliance', []):
             if not req.get('compliant', True):
@@ -92,29 +92,29 @@ async def analyze_document(document_id: str, analysis_type: str = "full") -> Com
                     regulation_reference="IRDAI Motor Insurance Regulations / Motor Vehicle Act 1988",
                     suggested_fix=req.get('issue', 'Ensure compliance with mandatory requirement')
                 ))
-        
+
         # Generate detailed explanation
         explanation = f"""
         Policy Classification: {analysis_result['classification']}
         Compliance Score: {analysis_result['compliance_score']:.2f}
-        
+
         Analysis Summary:
         - Classification determined using rule-based regulatory analysis
         - Regulatory rules classified by type (Mandatory, Optional, Procedural, etc.)
         - Policy checked against extracted regulatory requirements
-        
+
         Mandatory Requirements Status:
         """
-        
+
         for req in analysis_result.get('mandatory_compliance', []):
             status = "✅ PASSED" if req.get('compliant', False) else "❌ FAILED"
             explanation += f"\n        • {status}: {req.get('rule', 'Unknown requirement')}"
             if req.get('found_amount') and req.get('required_amount'):
                 explanation += f" (Found: Rs {req['found_amount']/100000:.0f}L, Required: Rs {req['required_amount']/100000:.0f}L)"
-        
+
         if analysis_result.get('violations'):
             explanation += f"\n\n        Regulatory Violations Detected: {len(analysis_result['violations'])}"
-        
+
         return ComplianceAnalysisResponse(
             document_id=document_id,
             classification=classification,
@@ -125,7 +125,7 @@ async def analyze_document(document_id: str, analysis_type: str = "full") -> Com
             analysis_timestamp=datetime.utcnow(),
             processing_time=processing_time
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -139,19 +139,19 @@ async def analyze_compliance(request: ComplianceAnalysisRequest):
         # Check if document exists
         upload_dir = Path("./data/uploads")
         document_files = list(upload_dir.glob(f"{request.document_id}.*"))
-        
+
         if not document_files:
             raise HTTPException(status_code=404, detail="Document not found")
-        
+
         # Perform analysis
         result = await analyze_document(request.document_id, request.analysis_type)
-        
+
         # TODO: Save results to database
-        
+
         logger.info(f"Compliance analysis completed for document: {request.document_id}")
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -163,7 +163,7 @@ async def start_batch_analysis(request: BatchAnalysisRequest, background_tasks: 
     """Start batch analysis of multiple documents"""
     try:
         batch_id = str(uuid.uuid4())
-        
+
         # Initialize batch job
         batch_jobs[batch_id] = {
             "batch_id": batch_id,
@@ -175,7 +175,7 @@ async def start_batch_analysis(request: BatchAnalysisRequest, background_tasks: 
             "started_at": datetime.utcnow(),
             "completed_at": None
         }
-        
+
         # Start background processing
         background_tasks.add_task(
             process_batch_analysis,
@@ -184,11 +184,11 @@ async def start_batch_analysis(request: BatchAnalysisRequest, background_tasks: 
             request.analysis_type,
             request.include_explanations
         )
-        
+
         logger.info(f"Started batch analysis: {batch_id} for {len(request.document_ids)} documents")
-        
+
         return BatchAnalysisResponse(**batch_jobs[batch_id])
-        
+
     except Exception as e:
         logger.error(f"Error starting batch analysis: {e}")
         raise HTTPException(status_code=500, detail="Failed to start batch analysis")
@@ -198,34 +198,34 @@ async def get_batch_status(batch_id: str):
     """Get status of batch analysis"""
     if batch_id not in batch_jobs:
         raise HTTPException(status_code=404, detail="Batch job not found")
-    
+
     return BatchAnalysisResponse(**batch_jobs[batch_id])
 
-async def process_batch_analysis(batch_id: str, document_ids: List[str], 
+async def process_batch_analysis(batch_id: str, document_ids: List[str],
                                analysis_type: str, include_explanations: bool):
     """Background task to process batch analysis"""
     try:
         results = []
-        
+
         for document_id in document_ids:
             try:
                 # Analyze document
                 result = await analyze_document(document_id, analysis_type)
                 results.append(result)
-                
+
                 # Update progress
                 batch_jobs[batch_id]["completed"] += 1
                 batch_jobs[batch_id]["results"] = results
-                
+
                 logger.info(f"Batch {batch_id}: Completed {len(results)}/{len(document_ids)} documents")
-                
+
             except Exception as e:
                 logger.error(f"Error processing document {document_id} in batch {batch_id}: {e}")
                 continue
-        
+
         # Generate summary
         summary = generate_batch_summary(results)
-        
+
         # Update batch job
         batch_jobs[batch_id].update({
             "status": "completed",
@@ -233,9 +233,9 @@ async def process_batch_analysis(batch_id: str, document_ids: List[str],
             "summary": summary,
             "completed_at": datetime.utcnow()
         })
-        
+
         logger.info(f"Batch analysis completed: {batch_id}")
-        
+
     except Exception as e:
         logger.error(f"Error in batch processing {batch_id}: {e}")
         batch_jobs[batch_id]["status"] = "failed"
@@ -244,14 +244,14 @@ def generate_batch_summary(results: List[ComplianceAnalysisResponse]) -> str:
     """Generate summary for batch analysis results"""
     if not results:
         return "No results to summarize"
-    
+
     total = len(results)
     compliant = sum(1 for r in results if r.classification == ComplianceClassification.COMPLIANT)
     non_compliant = sum(1 for r in results if r.classification == ComplianceClassification.NON_COMPLIANT)
     needs_review = sum(1 for r in results if r.classification == ComplianceClassification.REQUIRES_REVIEW)
-    
+
     avg_confidence = sum(r.confidence for r in results) / total
-    
+
     summary = f"""
     Batch Analysis Summary:
     - Total Documents: {total}
@@ -259,13 +259,13 @@ def generate_batch_summary(results: List[ComplianceAnalysisResponse]) -> str:
     - Non-Compliant: {non_compliant} ({non_compliant/total*100:.1f}%)
     - Requires Review: {needs_review} ({needs_review/total*100:.1f}%)
     - Average Confidence: {avg_confidence:.2f}
-    
+
     Key Findings:
     - {non_compliant} documents require immediate attention
     - {needs_review} documents need manual review
     - Overall compliance rate: {compliant/total*100:.1f}%
     """
-    
+
     return summary.strip()
 
 @router.get("/results/{document_id}", response_model=ComplianceAnalysisResponse)
@@ -275,7 +275,7 @@ async def get_analysis_results(document_id: str):
         # TODO: Fetch from database
         # For now, return mock data
         raise HTTPException(status_code=404, detail="Analysis results not found")
-        
+
     except HTTPException:
         raise
     except Exception as e:

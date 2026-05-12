@@ -12,18 +12,18 @@ import logging
 import logging.config
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 from .config import settings
 
 
 class RequestIdFilter(logging.Filter):
     """Injects request_id from contextvars into every log record.
-    
+
     Uses lazy import to avoid circular dependency:
     context.py → (nothing) ← logging.py (lazy import in filter)
     """
-    
+
     def filter(self, record):
         # Lazy import avoids circular: logging.py is imported by __init__.py
         # which is imported before context.py would be available at module level
@@ -34,11 +34,11 @@ class RequestIdFilter(logging.Filter):
 
 class JSONFormatter(logging.Formatter):
     """Structured JSON log formatter for production/staging environments.
-    
+
     Outputs one JSON object per line — compatible with log aggregation tools
     like ELK Stack, Datadog, CloudWatch, and GCP Logging.
     """
-    
+
     def format(self, record):
         log_entry = {
             "timestamp": self.formatTime(record, self.datefmt),
@@ -64,11 +64,11 @@ _is_production = settings.ENVIRONMENT in ("production", "staging")
 
 def setup_logging() -> None:
     """Setup logging configuration with request correlation and conditional JSON output."""
-    
+
     # Create logs directory if it doesn't exist
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
-    
+
     # Logging configuration dictionary
     logging_config: Dict[str, Any] = {
         "version": 1,
@@ -102,7 +102,7 @@ def setup_logging() -> None:
             "error_file": {
                 "class": "logging.handlers.RotatingFileHandler",
                 "level": "ERROR",
-                "formatter": "detailed", 
+                "formatter": "detailed",
                 "filename": log_dir / "errors.log",
                 "maxBytes": 10485760,  # 10MB
                 "backupCount": 5,
@@ -136,22 +136,22 @@ def setup_logging() -> None:
             "handlers": ["console", "file"],
         },
     }
-    
+
     # Apply logging configuration
     logging.config.dictConfig(logging_config)
-    
+
     # Add RequestIdFilter to all handlers so %(request_id)s is always available
     for handler_name in logging_config["handlers"]:
-        handler = logging.getLogger().handlers
+        logging.getLogger().handlers
         # Apply to root logger handlers
-    
+
     # Apply filter to all existing handlers across all loggers
     _apply_request_id_filter()
-    
+
     # In production/staging, swap console handler to JSON formatter
     if _is_production:
         _apply_json_console_formatter()
-    
+
     # Set specific logger levels for third-party libraries
     logging.getLogger("transformers").setLevel(logging.WARNING)
     logging.getLogger("torch").setLevel(logging.WARNING)
@@ -167,7 +167,7 @@ def _apply_request_id_filter() -> None:
     # Root logger
     for handler in logging.getLogger().handlers:
         handler.addFilter(_request_id_filter)
-    
+
     # Named loggers
     for logger_name in ("app", "uvicorn", "uvicorn.error", "uvicorn.access"):
         for handler in logging.getLogger(logger_name).handlers:
@@ -177,11 +177,11 @@ def _apply_request_id_filter() -> None:
 def _apply_json_console_formatter() -> None:
     """Replace console handler formatter with JSONFormatter for production."""
     json_formatter = JSONFormatter(datefmt="%Y-%m-%dT%H:%M:%S")
-    
+
     for handler in logging.getLogger().handlers:
         if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
             handler.setFormatter(json_formatter)
-    
+
     for logger_name in ("app", "uvicorn", "uvicorn.error", "uvicorn.access"):
         for handler in logging.getLogger(logger_name).handlers:
             if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):

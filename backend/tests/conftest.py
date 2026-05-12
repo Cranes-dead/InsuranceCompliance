@@ -16,33 +16,39 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+# ---------------------------------------------------------------------------
+# Mock heavy ML/DB imports at module level (BEFORE test collection).
+#
+# Why not a fixture?  Pytest session fixtures run *after* test collection,
+# but Python resolves the full import chain when collecting test modules:
+#   test_cache_service → app.services → compliance_service → phase2_engine → torch
+# If torch isn't installed (CI), collection fails before any fixture runs.
+# Patching sys.modules here guarantees stubs exist before any test file
+# is imported.
+# ---------------------------------------------------------------------------
+_MODULES_TO_MOCK = [
+    "torch", "torch.nn", "torch.cuda",
+    "transformers",
+    "sklearn", "sklearn.metrics", "sklearn.metrics.pairwise",
+    "chromadb",
+    "faiss",
+    "supabase",
+]
+
+_injected_mocks: dict[str, MagicMock] = {}
+for _mod_name in _MODULES_TO_MOCK:
+    if _mod_name not in sys.modules:
+        _injected_mocks[_mod_name] = MagicMock()
+        sys.modules[_mod_name] = _injected_mocks[_mod_name]
+
 
 @pytest.fixture(scope="session", autouse=True)
 def mock_heavy_imports():
-    """Mock heavy ML/DB imports so tests run without GPU or DB.
-
-    This patches torch, transformers, etc. at the module level so
-    that importing app.ml.* doesn't fail in CI.
-    """
-    # These modules may not exist in CI — provide stubs
-    modules_to_mock = [
-        "torch", "torch.nn", "torch.cuda",
-        "transformers",
-        "sklearn", "sklearn.metrics", "sklearn.metrics.pairwise",
-        "chromadb",
-        "faiss",
-        "supabase",
-    ]
-    mocks = {}
-    for mod_name in modules_to_mock:
-        if mod_name not in sys.modules:
-            mocks[mod_name] = MagicMock()
-            sys.modules[mod_name] = mocks[mod_name]
-
+    """Kept for backward compatibility — actual mocking happens above at import time."""
     yield
 
-    # Cleanup (optional — session-scoped so only at exit)
-    for mod_name in mocks:
+    # Cleanup at session end
+    for mod_name in _injected_mocks:
         sys.modules.pop(mod_name, None)
 
 

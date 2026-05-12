@@ -51,6 +51,7 @@ desktop.ini
 # Environment Variables
 .env
 .env.*
+!.env.example
 
 # Logs and Databases
 *.log

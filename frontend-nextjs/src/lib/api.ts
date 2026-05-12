@@ -27,7 +27,7 @@ apiClient.interceptors.response.use(
 // API endpoints
 export const API_ENDPOINTS = {
   // Health check
-  health: '/api/v1/health',
+  health: '/api/v1/system/health',
   
   // Policy analysis
   analyzePolicy: '/api/v1/analyze',

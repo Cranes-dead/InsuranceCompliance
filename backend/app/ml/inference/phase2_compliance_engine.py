@@ -18,6 +18,7 @@ from transformers import AutoModel, AutoTokenizer
 
 from app.core.config import settings
 from app.models.enums import ComplianceClassification, ViolationSeverity, ViolationType
+from app.ml.models.legacy_rule_classifier import RuleBasedComplianceClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,7 @@ class Phase2ComplianceEngine:
         self._model: Optional[DomainAdaptedClassifier] = None
         self._tokenizer: Optional[AutoTokenizer] = None
         self._id_to_label: Dict[int, str] = {}
+        self._fallback_classifier: Optional[RuleBasedComplianceClassifier] = None
         self._is_loaded = False
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -122,7 +124,25 @@ class Phase2ComplianceEngine:
                 config = json.load(fh)
             domain_path_str = config.get("domain_adapted_model_path")
             if domain_path_str:
-                domain_model_dir = Path(domain_path_str)
+                configured_path = Path(domain_path_str)
+                if configured_path.exists():
+                    domain_model_dir = configured_path
+                else:
+                    logger.warning(
+                        "Configured domain model path does not exist: %s; falling back to %s",
+                        configured_path,
+                        self.DOMAIN_MODEL_DIR,
+                    )
+
+        state_dict_path = self.MODEL_DIR / "pytorch_model.bin"
+        if not state_dict_path.exists():
+            logger.warning(
+                "Phase 2 weights missing at %s; using rule-based fallback classifier",
+                state_dict_path,
+            )
+            self._fallback_classifier = RuleBasedComplianceClassifier()
+            self._is_loaded = True
+            return
 
         # Load label map
         label_map_path = self.MODEL_DIR / "label_map.json"
@@ -145,10 +165,6 @@ class Phase2ComplianceEngine:
         )
 
         # Load trained weights
-        state_dict_path = self.MODEL_DIR / "pytorch_model.bin"
-        if not state_dict_path.exists():
-            raise FileNotFoundError(f"Missing model weights at {state_dict_path}")
-
         state_dict = torch.load(state_dict_path, map_location=self._device, weights_only=True)
         self._model.load_state_dict(state_dict)
         self._model.to(self._device)
@@ -160,6 +176,16 @@ class Phase2ComplianceEngine:
         )
 
     def _predict(self, content: str) -> Dict[str, Any]:
+        if self._fallback_classifier is not None:
+            classification, confidence = self._fallback_classifier.predict(content)
+            probability_map = {
+                "COMPLIANT": 0.0,
+                "NON_COMPLIANT": 0.0,
+                "REQUIRES_REVIEW": 0.0,
+            }
+            probability_map[classification] = confidence
+            return self._build_response(classification, confidence, probability_map)
+
         if not self._tokenizer or not self._model:
             raise RuntimeError("Phase 2 compliance model not loaded")
 

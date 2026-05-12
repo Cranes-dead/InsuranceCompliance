@@ -10,10 +10,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import chromadb
 import pandas as pd
 import torch
-from chromadb.config import Settings
 from transformers import AutoModel, AutoTokenizer
 
 from app.core.config import settings
@@ -44,8 +42,8 @@ class RegulationVectorStore:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer: Optional[AutoTokenizer] = None
         self.model: Optional[AutoModel] = None
-        self.client: Optional[chromadb.ClientAPI] = None
-        self.collection: Optional[chromadb.Collection] = None
+        self.client: Optional[Any] = None
+        self.collection: Optional[Any] = None
         self._initialized = False
 
         logger.info(f"🗄️  Vector store initialized with device: {self.device}")
@@ -56,6 +54,14 @@ class RegulationVectorStore:
             return
 
         try:
+            try:
+                import chromadb
+                from chromadb.config import Settings
+            except ImportError as import_error:
+                raise RuntimeError(
+                    "ChromaDB is not installed; RAG vector storage is unavailable."
+                ) from import_error
+
             logger.info("📚 Loading Legal-BERT model for embeddings...")
             self.tokenizer = AutoTokenizer.from_pretrained(str(self.model_path))
             self.model = AutoModel.from_pretrained(str(self.model_path))

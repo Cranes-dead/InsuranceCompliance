@@ -1,46 +1,46 @@
-import axios from 'axios';
+import axios from "axios";
 
 // Backend API base URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Create axios instance with default config
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
   timeout: 300000, // 5 minutes for RAG+LLaMA analysis (can take 2-4 minutes)
 });
 
 // Add response interceptor for debugging
 apiClient.interceptors.response.use(
-  response => {
-    console.log('✅ API Response:', response.config.url);
+  (response) => {
+    console.log("✅ API Response:", response.config.url);
     return response;
   },
-  error => {
-    console.error('❌ API Error:', error.config?.url, error.message);
+  (error) => {
+    console.error("❌ API Error:", error.config?.url, error.message);
     return Promise.reject(error);
-  }
+  },
 );
 
 // API endpoints
 export const API_ENDPOINTS = {
   // Health check
-  health: '/api/v1/system/health',
-  
+  health: "/api/v1/system/health",
+
   // Policy analysis
-  analyzePolicy: '/api/v1/analyze',
-  uploadPolicy: '/api/v1/upload',
-  
+  analyzePolicy: "/api/v1/analyze",
+  uploadPolicy: "/api/v1/upload",
+
   // Chat
-  chat: '/api/v1/chat',
-  createChatSession: '/api/v1/chat/session',
-  
+  chat: "/api/v1/chat",
+  createChatSession: "/api/v1/chat/session",
+
   // Dashboard
-  getPolicies: '/api/v1/policies',
+  getPolicies: "/api/v1/policies",
   getPolicyById: (id: string) => `/api/v1/policies/${id}`,
-  getStatistics: '/api/v1/statistics',
+  getStatistics: "/api/v1/statistics",
 };
 
 // API functions
@@ -54,10 +54,10 @@ export const api = {
   // Upload and analyze policy
   uploadPolicy: async (file: File) => {
     const formData = new FormData();
-    formData.append('file', file);
-    
+    formData.append("file", file);
+
     const response = await apiClient.post(API_ENDPOINTS.uploadPolicy, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { "Content-Type": "multipart/form-data" },
       timeout: 300000, // 5 minutes for RAG+LLaMA (regulation retrieval + LLaMA generation)
     });
     return response.data;

@@ -4,7 +4,11 @@ import { useState, useRef, useEffect } from 'react';
 import { ChatMessage } from '@/lib/types';
 import { api } from '@/lib/api';
 import { Send, Bot, User, Loader2, FileText, BookOpen, Shield, Lightbulb } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface ChatInterfaceProps {
   policyId: string;
@@ -27,7 +31,6 @@ export default function ChatInterface({ policyId, className = '' }: ChatInterfac
   }, [messages]);
 
   useEffect(() => {
-    // Welcome message
     setMessages([
       {
         role: 'assistant',
@@ -52,7 +55,7 @@ export default function ChatInterface({ policyId, className = '' }: ChatInterfac
 
     try {
       const response = await api.sendChatMessage(policyId, input.trim());
-      
+
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: response.response,
@@ -60,16 +63,16 @@ export default function ChatInterface({ policyId, className = '' }: ChatInterfac
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Chat error:', error);
       toast.error('Failed to send message');
-      
+
       const errorMessage: ChatMessage = {
         role: 'assistant',
         content: 'I apologize, but I encountered an error processing your message. Please try again.',
         timestamp: new Date().toISOString()
       };
-      
+
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setLoading(false);
@@ -97,65 +100,71 @@ export default function ChatInterface({ policyId, className = '' }: ChatInterfac
   };
 
   return (
-    <div className={`flex flex-col h-full bg-white overflow-hidden ${className}`}>
-      {/* Messages - Full Width */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+    <div className={`flex flex-col h-full bg-background overflow-hidden ${className}`}>
+      {/* Messages */}
+      <ScrollArea className="flex-1">
+        <div className="max-w-3xl mx-auto px-4 py-6">
           {messages.length === 0 && (
             <div className="text-center py-12">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4">
-                <Bot className="text-white" size={32} />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Ask anything about this policy</h2>
-              <p className="text-gray-500">Get instant answers about compliance, violations, and IRDAI regulations</p>
+              <Avatar className="size-12 mx-auto mb-3">
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  <Bot className="size-6" />
+                </AvatarFallback>
+              </Avatar>
+              <h2 className="text-xl font-heading text-foreground mb-1">Ask anything about this policy</h2>
+              <p className="text-sm text-muted-foreground">Get instant answers about compliance, violations, and IRDAI regulations</p>
             </div>
           )}
 
-          <div className="space-y-6">
+          <div className="space-y-5">
             {messages.map((message, index) => (
               <div
                 key={index}
-                className={`flex gap-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {message.role === 'assistant' && (
-                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                    <Bot className="text-white" size={16} />
-                  </div>
+                  <Avatar className="size-7 flex-shrink-0 mt-0.5">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                      <Bot className="size-3.5" />
+                    </AvatarFallback>
+                  </Avatar>
                 )}
-                
+
                 <div className={`flex-1 max-w-[85%] ${message.role === 'user' ? 'text-right' : ''}`}>
                   <div
-                    className={`inline-block px-4 py-3 rounded-2xl ${
+                    className={`inline-block px-3.5 py-2.5 rounded-xl text-sm leading-relaxed ${
                       message.role === 'user'
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
-                        : 'bg-gray-50 text-gray-800 border border-gray-100'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-foreground'
                     }`}
                   >
-                    <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
-                      {message.content}
-                    </p>
+                    <p className="whitespace-pre-wrap">{message.content}</p>
                   </div>
-                  <p className="text-xs text-gray-400 mt-1.5 px-1">
+                  <p className="text-[10px] text-muted-foreground/60 mt-1 px-1">
                     {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
 
                 {message.role === 'user' && (
-                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                    <User className="text-white" size={16} />
-                  </div>
+                  <Avatar className="size-7 flex-shrink-0 mt-0.5">
+                    <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">
+                      <User className="size-3.5" />
+                    </AvatarFallback>
+                  </Avatar>
                 )}
               </div>
             ))}
 
             {loading && (
-              <div className="flex gap-4 justify-start">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                  <Bot className="text-white" size={16} />
-                </div>
+              <div className="flex gap-3 justify-start">
+                <Avatar className="size-7 flex-shrink-0">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                    <Bot className="size-3.5" />
+                  </AvatarFallback>
+                </Avatar>
                 <div className="flex-1">
-                  <div className="inline-block px-4 py-3 rounded-2xl bg-gray-50 border border-gray-100">
-                    <Loader2 className="animate-spin text-blue-600" size={20} />
+                  <div className="inline-block px-3.5 py-2.5 rounded-xl bg-muted">
+                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
                   </div>
                 </div>
               </div>
@@ -164,55 +173,55 @@ export default function ChatInterface({ policyId, className = '' }: ChatInterfac
             <div ref={messagesEndRef} />
           </div>
         </div>
-      </div>
+      </ScrollArea>
 
-      {/* Input Area - Bottom Sticky */}
-      <div className="border-t border-gray-200 bg-white shadow-lg">
-        <div className="max-w-4xl mx-auto px-6 py-4">
+      {/* Input Area */}
+      <div className="border-t border-border/50 bg-background">
+        <div className="max-w-3xl mx-auto px-4 py-3">
           {/* Quick Action Buttons */}
           {messages.length <= 1 && (
-            <div className="flex flex-wrap gap-2 mb-3">
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
               {quickActions.map((action, index) => (
-                <button
+                <Button
                   key={index}
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs h-7"
                   onClick={() => handleQuickAction(action.prompt)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-full transition-colors"
                   disabled={loading}
                 >
-                  <action.icon size={14} />
-                  <span>{action.label}</span>
-                </button>
+                  <action.icon className="size-3" />
+                  {action.label}
+                </Button>
               ))}
             </div>
           )}
 
           {/* Input Field */}
           <div className="relative">
-            <textarea
+            <Textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything or @mention a Space"
-              className="w-full resize-none px-5 py-4 pr-14 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-[15px] text-gray-900 placeholder:text-gray-400 bg-white disabled:bg-gray-50 disabled:text-gray-500 transition-shadow"
+              placeholder="Ask anything about this policy..."
+              className="resize-none pr-12 min-h-[48px] max-h-[160px] text-sm"
               rows={1}
-              style={{ minHeight: '56px', maxHeight: '200px' }}
               disabled={loading}
             />
-            
-            {/* Send Button - Inside Input */}
-            <button
+
+            <Button
+              size="icon"
               onClick={handleSend}
               disabled={!input.trim() || loading}
-              className="absolute right-3 bottom-3 w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-sm"
+              className="absolute right-2 bottom-2 size-8"
             >
-              <Send size={18} />
-            </button>
+              <Send className="size-3.5" />
+            </Button>
           </div>
 
-          {/* Helper Text */}
-          <p className="text-xs text-gray-400 mt-2 text-center">
-            Press <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-200 rounded text-gray-600">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-200 rounded text-gray-600">Shift + Enter</kbd> for new line
+          <p className="text-[10px] text-muted-foreground/60 mt-1.5 text-center">
+            Press <kbd className="px-1 py-0.5 bg-muted border border-border rounded text-[9px]">Enter</kbd> to send, <kbd className="px-1 py-0.5 bg-muted border border-border rounded text-[9px]">Shift + Enter</kbd> for new line
           </p>
         </div>
       </div>

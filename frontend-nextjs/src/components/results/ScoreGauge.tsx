@@ -10,9 +10,9 @@ export default function ScoreGauge({ score, label, className = '' }: ScoreGaugeP
   const offset = circumference - (score / 100) * circumference;
 
   const getColor = () => {
-    if (score >= 80) return '#22c55e'; // green
-    if (score >= 60) return '#eab308'; // yellow
-    return '#ef4444'; // red
+    if (score >= 80) return 'var(--success)';
+    if (score >= 60) return 'var(--warning)';
+    return 'var(--destructive)';
   };
 
   return (
@@ -24,8 +24,8 @@ export default function ScoreGauge({ score, label, className = '' }: ScoreGaugeP
             cx="96"
             cy="96"
             r={radius}
-            stroke="#e5e7eb"
-            strokeWidth="12"
+            stroke="var(--muted)"
+            strokeWidth="10"
             fill="none"
           />
           {/* Progress circle */}
@@ -34,7 +34,7 @@ export default function ScoreGauge({ score, label, className = '' }: ScoreGaugeP
             cy="96"
             r={radius}
             stroke={getColor()}
-            strokeWidth="12"
+            strokeWidth="10"
             fill="none"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
@@ -44,10 +44,10 @@ export default function ScoreGauge({ score, label, className = '' }: ScoreGaugeP
         </svg>
         {/* Score text */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-4xl font-bold" style={{ color: getColor() }}>
+          <span className="text-4xl font-heading" style={{ color: getColor() }}>
             {score}%
           </span>
-          <span className="text-sm text-gray-500 mt-1">{label}</span>
+          <span className="text-xs text-muted-foreground mt-1">{label}</span>
         </div>
       </div>
     </div>

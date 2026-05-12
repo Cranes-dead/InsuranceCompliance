@@ -1,30 +1,32 @@
+import Navbar from '@/components/layout/Navbar';
 import FileUpload from '@/components/upload/FileUpload';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function UploadPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 py-20">
-      <div className="container mx-auto px-4">
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      <div className="container mx-auto px-4 py-12">
         {/* Back Button */}
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-8 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Home
+        <Link href="/">
+          <Button variant="ghost" size="sm" className="gap-1.5 mb-6 -ml-2 text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="size-3.5" />
+            Back to Home
+          </Button>
         </Link>
 
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-heading text-foreground mb-3">
             Upload Your Policy
           </h1>
-          <p className="text-lg text-gray-600">
+          <p className="text-muted-foreground text-lg">
             Get instant compliance verification powered by AI
           </p>
         </div>
-        
+
         {/* Upload Component */}
         <FileUpload />
       </div>

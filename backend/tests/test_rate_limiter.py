@@ -24,7 +24,7 @@ def _make_app(max_requests=3, window_seconds=60):
 
     app = Starlette(
         routes=[
-            Route("/", homepage),
+            Route("/api/test", homepage),
             Route("/health", health),
         ]
     )
@@ -43,32 +43,32 @@ class TestRateLimiter:
         app = _make_app(max_requests=5)
         client = TestClient(app)
         for _ in range(5):
-            resp = client.get("/")
+            resp = client.get("/api/test")
             assert resp.status_code == 200
 
     def test_requests_over_limit_get_429(self):
         app = _make_app(max_requests=3)
         client = TestClient(app)
         for _ in range(3):
-            resp = client.get("/")
+            resp = client.get("/api/test")
             assert resp.status_code == 200
         # 4th request should be rate limited
-        resp = client.get("/")
+        resp = client.get("/api/test")
         assert resp.status_code == 429
         assert "RATE_LIMIT_EXCEEDED" in resp.text
 
     def test_rate_limit_headers_present(self):
         app = _make_app(max_requests=10)
         client = TestClient(app)
-        resp = client.get("/")
+        resp = client.get("/api/test")
         assert "X-RateLimit-Limit" in resp.headers
         assert "X-RateLimit-Remaining" in resp.headers
 
     def test_remaining_decreases(self):
         app = _make_app(max_requests=5)
         client = TestClient(app)
-        r1 = client.get("/")
-        r2 = client.get("/")
+        r1 = client.get("/api/test")
+        r2 = client.get("/api/test")
         rem1 = int(r1.headers["X-RateLimit-Remaining"])
         rem2 = int(r2.headers["X-RateLimit-Remaining"])
         assert rem2 < rem1
@@ -76,8 +76,8 @@ class TestRateLimiter:
     def test_429_includes_retry_after(self):
         app = _make_app(max_requests=1, window_seconds=30)
         client = TestClient(app)
-        client.get("/")  # use up limit
-        resp = client.get("/")
+        client.get("/api/test")  # use up limit
+        resp = client.get("/api/test")
         assert resp.status_code == 429
         assert "Retry-After" in resp.headers
         assert resp.headers["Retry-After"] == "30"
@@ -85,7 +85,7 @@ class TestRateLimiter:
     def test_health_endpoint_exempt(self):
         app = _make_app(max_requests=1)
         client = TestClient(app)
-        client.get("/")  # exhaust limit on /
+        client.get("/api/test")  # exhaust limit on /api/test
         # /health should still work
         resp = client.get("/health")
         assert resp.status_code == 200

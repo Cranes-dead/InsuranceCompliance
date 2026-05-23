@@ -200,6 +200,62 @@ class RAGLLaMAComplianceService:
 
         return response
 
+    async def stream_chat_about_policy(
+        self,
+        session_id: str,
+        user_query: str,
+        analysis_results: Dict[str, Any],
+        policy_text: Optional[str] = None
+    ):
+        """Interactive Q&A about policy analysis (Streaming).
+
+        Args:
+            session_id: Unique session identifier for conversation
+            user_query: User's question
+            analysis_results: Previous analysis results
+            policy_text: Optional policy text for context
+
+        Yields:
+            Text chunks
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        # Get or create chat history
+        if session_id not in self._chat_sessions:
+            self._chat_sessions[session_id] = []
+
+        chat_history = self._chat_sessions[session_id]
+
+        # Retrieve relevant policy excerpt if policy text provided
+        policy_excerpt = ""
+        if policy_text and len(policy_text) > 500:
+            # Use RAG to find relevant excerpt for the query
+            relevant_sections = await self.retriever.retrieve_for_policy(
+                policy_text=user_query,  # Use query to find relevant policy sections
+                top_k=2
+            )
+            if relevant_sections:
+                policy_excerpt = relevant_sections[0]['text'][:500]
+
+        # Generate response chunks
+        full_response = ""
+        async for chunk in self.llama_engine.stream_chat(
+            user_query=user_query,
+            analysis_results=analysis_results,
+            chat_history=chat_history,
+            policy_excerpt=policy_excerpt
+        ):
+            full_response += chunk
+            yield chunk
+
+        # Update chat history after full response is generated
+        chat_history.append({"role": "user", "content": user_query})
+        chat_history.append({"role": "assistant", "content": full_response})
+
+        # Keep only last 10 messages
+        self._chat_sessions[session_id] = chat_history[-10:]
+
     async def analyze_section(
         self,
         section_text: str,

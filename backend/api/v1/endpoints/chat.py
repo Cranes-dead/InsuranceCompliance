@@ -5,8 +5,10 @@ Integrates with LLaMA for conversational analysis.
 
 from datetime import datetime
 from typing import Any, Dict, Optional
+import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.core import get_logger
@@ -68,9 +70,10 @@ class ChatResponse(BaseModel):
     timestamp: str
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat")
 async def chat_with_policy(
     request: ChatRequest,
+    background_tasks: BackgroundTasks,
     compliance_service: ComplianceService = Depends(get_compliance_service)
 ):
     """
@@ -119,19 +122,17 @@ async def chat_with_policy(
         policy_data = await db.get_policy(request.session_id)
 
         if not policy_data:
-            return ChatResponse(
-                response="I don't have analysis data for this policy. Please ensure the policy has been analyzed first.",
-                session_id=request.session_id,
-                timestamp=datetime.utcnow().isoformat()
-            )
+            _msg = "I don't have analysis data for this policy. Please ensure the policy has been analyzed first."
+            async def error_stream_no_data():
+                yield "0:" + json.dumps(_msg) + "\n"
+            return StreamingResponse(error_stream_no_data(), media_type="text/plain", headers={"x-vercel-ai-data-stream": "v1"})
 
         # Validate policy has complete analysis data
         if not policy_data.get('classification') or not policy_data.get('rag_metadata'):
-            return ChatResponse(
-                response="This policy hasn't been fully analyzed yet. Please wait for the analysis to complete before chatting.",
-                session_id=request.session_id,
-                timestamp=datetime.utcnow().isoformat()
-            )
+            _msg = "This policy hasn't been fully analyzed yet. Please wait for the analysis to complete before chatting."
+            async def error_stream_incomplete():
+                yield "0:" + json.dumps(_msg) + "\n"
+            return StreamingResponse(error_stream_incomplete(), media_type="text/plain", headers={"x-vercel-ai-data-stream": "v1"})
 
         # Get or create chat session
         chat_session_id = await db.get_or_create_chat_session(request.session_id)
@@ -157,42 +158,58 @@ async def chat_with_policy(
 
         logger.info(f"Chat request for policy {request.session_id}: {request.message[:100]}")
 
-        # Use RAG+LLaMA service for context-aware chat
-        try:
-            # Check if RAG+LLaMA service is available
-            if hasattr(compliance_service, 'rag_llama_service') and compliance_service.rag_llama_service:
-                response_text = await compliance_service.rag_llama_service.chat_about_policy(
-                    session_id=request.session_id,
-                    user_query=request.message,
-                    analysis_results=analysis_results,
-                    policy_text=None  # Can add policy text retrieval if needed
-                )
-            else:
-                # Fallback to building context manually
+        # Stream generator for Vercel AI SDK
+        async def stream_generator():
+            full_response = ""
+            try:
+                if hasattr(compliance_service, 'rag_llama_service') and compliance_service.rag_llama_service:
+                    async for chunk in compliance_service.rag_llama_service.stream_chat_about_policy(
+                        session_id=request.session_id,
+                        user_query=request.message,
+                        analysis_results=analysis_results,
+                        policy_text=None
+                    ):
+                        full_response += chunk
+                        yield f'0:{json.dumps(chunk)}\n'
+                else:
+                    response_text = await _generate_contextual_response(
+                        request.message,
+                        analysis_results
+                    )
+                    full_response = response_text
+                    yield f'0:{json.dumps(response_text)}\n'
+            except Exception as llm_error:
+                logger.warning(f"LLaMA generation failed, using fallback: {llm_error}")
                 response_text = await _generate_contextual_response(
                     request.message,
                     analysis_results
                 )
-        except Exception as llm_error:
-            logger.warning(f"LLaMA generation failed, using fallback: {llm_error}")
-            response_text = await _generate_contextual_response(
-                request.message,
-                analysis_results
+                full_response = response_text
+                yield f'0:{json.dumps(response_text)}\n'
+
+            logger.info(f"✅ Chat response stream completed for session {request.session_id}")
+
+            # Store assistant response in database in background
+            # We can't use await db.add_chat_message directly in the generator because
+            # BackgroundTasks are executed after the response is sent, but here we can just
+            # add the task. But wait, we don't have access to background_tasks inside the async generator easily?
+            # Actually we do. We will use it. But wait, `add_chat_message` requires async.
+            # `background_tasks.add_task` supports async functions.
+            background_tasks.add_task(
+                db.add_chat_message,
+                session_id=chat_session_id,
+                role="assistant",
+                content=full_response
             )
 
-        logger.info(f"✅ Chat response generated for session {request.session_id}")
-
-        # Store assistant response in database
-        await db.add_chat_message(
-            session_id=chat_session_id,
-            role="assistant",
-            content=response_text
-        )
-
-        return ChatResponse(
-            response=response_text,
-            session_id=request.session_id,
-            timestamp=datetime.utcnow().isoformat()
+        return StreamingResponse(
+            stream_generator(),
+            media_type="text/plain",
+            headers={
+                "x-vercel-ai-data-stream": "v1",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
         )
 
     except Exception as e:

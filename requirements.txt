@@ -50,7 +50,7 @@ pydantic-settings
 loguru
 pytest
 pytest-asyncio  # Async test support (Phase 8)
-httpx
+httpx>=0.25,<0.28  # Pinned: httpx 0.28 removed Client(app=) which breaks starlette TestClient
 aiohttp  # Async HTTP client for Ollama
 psutil  # System resource monitoring for health endpoint
 apscheduler  # Scheduled scraping (Phase 1)

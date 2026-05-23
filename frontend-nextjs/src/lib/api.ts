@@ -70,7 +70,7 @@ export const api = {
   },
 
   // Chat with AI
-  sendChatMessage: async (sessionId: string, message: string, policyContext?: any) => {
+  sendChatMessage: async (sessionId: string, message: string, policyContext?: Record<string, unknown>) => {
     const response = await apiClient.post(API_ENDPOINTS.chat, {
       session_id: sessionId,
       message,

@@ -35,11 +35,12 @@ export default function AnalysisPage() {
         setError(null);
         const data = await api.getAnalysis(id);
         setAnalysis(data);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Error fetching analysis:', err);
-        const errorMessage = err.response?.status === 404 
+        const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
+        const errorMessage = axiosErr.response?.status === 404 
           ? 'Policy not found. It may have been deleted or the server was restarted.'
-          : err.response?.data?.detail || 'Failed to load analysis';
+          : axiosErr.response?.data?.detail || 'Failed to load analysis';
         setError(errorMessage);
         toast.error(errorMessage);
       } finally {

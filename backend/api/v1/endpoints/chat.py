@@ -200,6 +200,8 @@ async def chat_with_policy(
             timestamp=datetime.utcnow().isoformat()
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Chat error for session {request.session_id}: {e}")
         raise HTTPException(

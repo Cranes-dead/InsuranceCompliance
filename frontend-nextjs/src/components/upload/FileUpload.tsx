@@ -57,24 +57,27 @@ export default function FileUpload() {
         router.push(`/analysis/${response.id}`);
       }, 500);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Clear progress on error
       toast.dismiss('analysis-progress');
       setProgress(0);
       
       // Provide helpful error messages
-      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      if ((error as { code?: string }).code === 'ECONNABORTED' || (error as Error).message?.includes('timeout')) {
         toast.error(
           'Analysis is taking longer than expected. ' +
           'Your file may still be processing. Check the policy list in a few minutes.',
           { duration: 8000 }
         );
-      } else if (error.response?.status === 429) {
-        toast.error('Too many requests. Please wait a moment and try again.');
-      } else if (error.response?.status === 400) {
-        toast.error(error.response?.data?.detail || 'Invalid file. Please check file format and size.');
       } else {
-        toast.error(error.response?.data?.message || error.response?.data?.detail || 'Upload failed. Please try again.');
+        const axiosErr = error as import('axios').AxiosError<{ detail?: string; message?: string }>;
+        if (axiosErr.response?.status === 429) {
+          toast.error('Too many requests. Please wait a moment and try again.');
+        } else if (axiosErr.response?.status === 400) {
+          toast.error(axiosErr.response?.data?.detail || 'Invalid file. Please check file format and size.');
+        } else {
+          toast.error(axiosErr.response?.data?.message || axiosErr.response?.data?.detail || 'Upload failed. Please try again.');
+        }
       }
     } finally {
       setUploading(false);
@@ -160,7 +163,7 @@ export default function FileUpload() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
               <p className="font-medium mb-1">⏱️ This may take 2-3 minutes</p>
               <p className="text-blue-600">
-                We're retrieving 112 IRDAI regulations and using AI to analyze your policy for compliance.
+                We&apos;re retrieving 112 IRDAI regulations and using AI to analyze your policy for compliance.
               </p>
             </div>
           </div>

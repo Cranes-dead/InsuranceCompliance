@@ -60,7 +60,7 @@ export default function ChatInterface({ policyId, className = '' }: ChatInterfac
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Chat error:', error);
       toast.error('Failed to send message');
       

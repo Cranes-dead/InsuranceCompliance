@@ -339,6 +339,7 @@ class ComplianceService:
                 "reviewRequired": 0,
                 "averageScore": 0,
                 "recentAnalyses": [],
+                "violationBreakdown": [],
                 "error": str(e)
             }
 

@@ -45,11 +45,26 @@ export interface Policy {
   score: number;
 }
 
+/** Lightweight analysis summary returned by the statistics endpoint. */
+export interface RecentAnalysis {
+  id: string;
+  filename: string;
+  classification: ComplianceStatus;
+  compliance_score: number;
+  created_at: string;
+}
+
+export interface ViolationBreakdown {
+  name: string;
+  count: number;
+}
+
 export interface DashboardStats {
   totalPolicies: number;
   compliantPolicies: number;
   nonCompliantPolicies: number;
   reviewRequired: number;
   averageScore: number;
-  recentAnalyses: PolicyAnalysis[];
+  recentAnalyses: RecentAnalysis[];
+  violationBreakdown: ViolationBreakdown[];
 }

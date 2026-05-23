@@ -297,7 +297,8 @@ class SupabaseService:
                     "nonCompliantPolicies": 0,
                     "reviewRequired": 0,
                     "averageScore": 0,
-                    "recentAnalyses": []
+                    "recentAnalyses": [],
+                    "violationBreakdown": [],
                 }
 
             # Get counts by classification using separate queries
@@ -332,12 +333,24 @@ class SupabaseService:
 
             # Get recent 5 analyses
             recent_result = self.client.table("policies")\
-                .select("id, filename, classification, compliance_score")\
+                .select("id, filename, classification, compliance_score, created_at")\
                 .order("created_at", desc=True)\
                 .limit(5)\
                 .execute()
 
             recent = recent_result.data or []
+
+            # Aggregate violation severity breakdown from all policies
+            violations_result = self.client.table("policies")\
+                .select("violations")\
+                .execute()
+
+            violation_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+            for policy in (violations_result.data or []):
+                for v in (policy.get("violations") or []):
+                    severity = str(v.get("severity", "MEDIUM")).upper()
+                    if severity in violation_counts:
+                        violation_counts[severity] += 1
 
             logger.info(f"📊 Statistics: {total} policies, {compliant} compliant, {non_compliant} non-compliant, {review} review")
 
@@ -352,10 +365,15 @@ class SupabaseService:
                         "id": p["id"],
                         "filename": p["filename"],
                         "classification": p["classification"],
-                        "score": p["compliance_score"]
+                        "compliance_score": p["compliance_score"],
+                        "created_at": p.get("created_at", ""),
                     }
                     for p in recent
-                ]
+                ],
+                "violationBreakdown": [
+                    {"name": severity, "count": count}
+                    for severity, count in violation_counts.items()
+                ],
             }
 
         except Exception as e:
@@ -366,7 +384,8 @@ class SupabaseService:
                 "nonCompliantPolicies": 0,
                 "reviewRequired": 0,
                 "averageScore": 0,
-                "recentAnalyses": []
+                "recentAnalyses": [],
+                "violationBreakdown": [],
             }
 
 

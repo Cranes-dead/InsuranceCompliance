@@ -25,7 +25,7 @@ export default function DashboardPage() {
         ]);
         setStats(statsData);
         setPolicies(policiesData);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error fetching dashboard data:', error);
         toast.error('Failed to load dashboard data');
         // Set empty data on error
@@ -35,7 +35,8 @@ export default function DashboardPage() {
           nonCompliantPolicies: 0,
           reviewRequired: 0,
           averageScore: 0,
-          recentAnalyses: []
+          recentAnalyses: [],
+          violationBreakdown: [],
         });
         setPolicies([]);
       } finally {
@@ -61,13 +62,8 @@ export default function DashboardPage() {
     );
   }
 
-  // Mock violation data for chart (you can get this from backend)
-  const violationData = [
-    { name: 'Critical', count: 5 },
-    { name: 'High', count: 12 },
-    { name: 'Medium', count: 23 },
-    { name: 'Low', count: 8 }
-  ];
+  // Real violation data from backend aggregation
+  const violationData = stats?.violationBreakdown ?? [];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-8">

@@ -33,14 +33,14 @@ class SchedulerService:
         """Start the scheduler with configured jobs."""
         self.scheduler.add_job(
             self.scraper_service.run_scrape,
-            CronTrigger(hour=2, minute=0),  # 2:00 AM daily
+            CronTrigger(hour=23, minute=0),  # 11:00 PM daily
             id="daily_regulation_scrape",
             name="Daily IRDAI Regulation Scrape",
             replace_existing=True,
             misfire_grace_time=3600,  # Allow 1hr late execution if server was down
         )
         self.scheduler.start()
-        logger.info("📅 Scheduler started — daily regulation scrape at 02:00 AM")
+        logger.info("📅 Scheduler started — daily regulation scrape at 11:00 PM")
 
     async def shutdown(self) -> None:
         """Gracefully shutdown the scheduler."""

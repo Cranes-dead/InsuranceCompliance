@@ -246,6 +246,21 @@ class RAGLLaMAComplianceService:
             del self._chat_sessions[session_id]
             logger.info(f"🗑️  Cleared chat session: {session_id}")
 
+    def has_chat_session(self, session_id: str) -> bool:
+        """Return whether this process already has chat history loaded."""
+        return session_id in self._chat_sessions
+
+    def seed_chat_session(self, session_id: str, history: List[Dict[str, Any]]) -> None:
+        """Preload chat history from persistent storage on first use."""
+        if session_id in self._chat_sessions:
+            return
+
+        self._chat_sessions[session_id] = [
+            {"role": message["role"], "content": message["content"]}
+            for message in history
+            if message.get("role") and message.get("content")
+        ][-10:]
+
     def get_service_status(self) -> Dict[str, Any]:
         """Get status information about the service."""
         return {

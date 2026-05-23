@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..core import get_logger
+from ..core import get_logger, settings
 from ..core.exceptions import (
     ComplianceSystemException,
     DocumentProcessingError,
@@ -211,17 +211,19 @@ class ComplianceService:
 
         logger.info(f"Starting batch analysis for {len(documents)} documents")
 
-        # Create analysis tasks
-        tasks = []
-        for doc in documents:
-            task = self.analyze_document(
-                document_path=doc["path"],
-                document_id=doc["id"],
-                analysis_type=analysis_type,
-                include_explanation=include_explanation,
-                custom_rules=custom_rules
-            )
-            tasks.append(task)
+        semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_TASKS)
+
+        async def _bounded_analyze(doc: Dict[str, str]) -> ComplianceAnalysisResponse:
+            async with semaphore:
+                return await self.analyze_document(
+                    document_path=doc["path"],
+                    document_id=doc["id"],
+                    analysis_type=analysis_type,
+                    include_explanation=include_explanation,
+                    custom_rules=custom_rules
+                )
+
+        tasks = [_bounded_analyze(doc) for doc in documents]
 
         # Execute tasks concurrently
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -343,114 +345,3 @@ class ComplianceService:
     def is_initialized(self) -> bool:
         """Check if service is initialized."""
         return self._initialized
-
-    async def generate_chat_response(
-        self,
-        query: str,
-        context: str
-    ) -> str:
-        """
-        Generate chat response using LLaMA.
-
-        Args:
-            query: User's question
-            context: Context string with policy information
-
-        Returns:
-            AI-generated response
-        """
-        try:
-            # Try to use RAG LLaMA service if available
-            from ..ml.rag_llama_service import RAGLLaMAComplianceService
-
-            # Check if we have a RAG LLaMA service instance
-            if not hasattr(self, 'rag_llama_service'):
-                self.rag_llama_service = RAGLLaMAComplianceService()
-                await self.rag_llama_service.initialize()
-
-            # Use simplified chat (context is pre-built)
-            # Extract policy data from context if available
-
-            response = await self.rag_llama_service.llama_engine.provider.generate(
-                prompt=f"{context}\n\nProvide a clear, helpful response to the user.",
-                temperature=0.3
-            )
-
-            return response.strip()
-
-        except Exception as e:
-            logger.error(f"Chat generation failed: {e}")
-            logger.debug(f"Full error details: {e.__class__.__name__}: {str(e)}")
-
-            # Generate intelligent fallback response
-            if "Policy Information" in context:
-                # Extract key information from context
-                lines = context.split('\n')
-                policy_info = {}
-                for line in lines:
-                    if ': ' in line:
-                        key, value = line.split(': ', 1)
-                        policy_info[key.strip('- ')] = value
-
-                # Build user-friendly response
-                filename = policy_info.get('Filename', 'the policy')
-                classification = policy_info.get('Classification', 'UNKNOWN')
-                score = policy_info.get('Compliance Score', 'N/A')
-
-                fallback = f"Based on the analysis of {filename}:\n\n"
-
-                if 'violation' in query.lower() or 'issue' in query.lower() or 'problem' in query.lower():
-                    fallback += f"**Status:** {classification}\n"
-                    fallback += f"**Compliance Score:** {score}\n\n"
-
-                    if 'Violations Found:' in context:
-                        # Extract violation count
-                        for line in lines:
-                            if 'Violations Found:' in line:
-                                fallback += f"I found {line.split(':')[1].strip()} violation(s) in your policy.\n\n"
-                                break
-
-                        # Extract violations
-                        in_violations = False
-                        for line in lines:
-                            if 'Key Violations:' in line:
-                                in_violations = True
-                                continue
-                            if in_violations and line.strip().startswith(('1.', '2.', '3.')):
-                                fallback += f"{line.strip()}\n"
-                            elif in_violations and 'Recommendations:' in line:
-                                break
-                    else:
-                        fallback += "No specific violations were detected in the initial analysis.\n"
-
-                elif 'fix' in query.lower() or 'recommendation' in query.lower() or 'improve' in query.lower():
-                    fallback += f"**Current Status:** {classification} ({score})\n\n"
-                    fallback += "**Recommendations to improve compliance:**\n\n"
-
-                    if 'Recommendations:' in context:
-                        in_recs = False
-                        for line in lines:
-                            if 'Recommendations:' in line:
-                                in_recs = True
-                                continue
-                            if in_recs and line.strip().startswith(('1.', '2.', '3.')):
-                                fallback += f"{line.strip()}\n"
-                            elif in_recs and 'User Question:' in line:
-                                break
-
-                elif 'regulation' in query.lower() or 'irdai' in query.lower():
-                    fallback += "This policy was analyzed against IRDAI insurance regulations.\n\n"
-                    fallback += f"**Compliance Status:** {classification}\n"
-                    fallback += f"**Confidence:** {policy_info.get('Confidence', 'N/A')}\n\n"
-                    fallback += "The analysis used relevant IRDAI guidelines to assess compliance."
-
-                else:
-                    # General query
-                    fallback += f"**Classification:** {classification}\n"
-                    fallback += f"**Compliance Score:** {score}\n"
-                    fallback += f"**Confidence:** {policy_info.get('Confidence', 'N/A')}\n\n"
-                    fallback += "For specific information about violations or recommendations, please ask about those topics."
-
-                return fallback
-            else:
-                return f"I'd be happy to help answer '{query}', but I need a policy to analyze first. Please upload a policy document to get started."

@@ -136,6 +136,11 @@ async def chat_with_policy(
         # Get or create chat session
         chat_session_id = await db.get_or_create_chat_session(request.session_id)
 
+        rag_llama_service = getattr(compliance_service, "rag_llama_service", None)
+        if rag_llama_service and not rag_llama_service.has_chat_session(request.session_id):
+            history = await db.get_chat_history(chat_session_id, limit=10)
+            rag_llama_service.seed_chat_session(request.session_id, history)
+
         # Store user message
         await db.add_chat_message(
             session_id=chat_session_id,
@@ -160,8 +165,8 @@ async def chat_with_policy(
         # Use RAG+LLaMA service for context-aware chat
         try:
             # Check if RAG+LLaMA service is available
-            if hasattr(compliance_service, 'rag_llama_service') and compliance_service.rag_llama_service:
-                response_text = await compliance_service.rag_llama_service.chat_about_policy(
+            if rag_llama_service:
+                response_text = await rag_llama_service.chat_about_policy(
                     session_id=request.session_id,
                     user_query=request.message,
                     analysis_results=analysis_results,

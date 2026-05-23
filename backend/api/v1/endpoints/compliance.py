@@ -9,7 +9,8 @@ from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
-from app.core import get_logger
+from app.core import get_logger, settings
+from app.db import get_supabase_service
 from app.models import (
     BatchAnalysisRequest,
     BatchAnalysisResponse,
@@ -29,6 +30,70 @@ router = APIRouter()
 # Bounded to prevent unbounded memory growth
 MAX_BATCH_STORE_SIZE = 1000
 batch_status_store: Dict[str, dict] = {}
+
+
+def _resolve_document_path(document_id: str):
+    """Find an uploaded document by ID regardless of extension."""
+    matches = [
+        path for path in settings.UPLOAD_DIR.glob(f"{document_id}.*")
+        if path.is_file()
+    ]
+    if not matches:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Document {document_id} not found"
+        )
+    return matches[0]
+
+
+def _classification_value(result: ComplianceAnalysisResponse) -> str:
+    classification = result.classification
+    return str(classification.value if hasattr(classification, "value") else classification)
+
+
+def _serialize_violation(violation) -> dict:
+    severity = violation.severity
+    violation_type = violation.type
+    return {
+        "severity": str(severity.value if hasattr(severity, "value") else severity),
+        "type": str(violation_type.value if hasattr(violation_type, "value") else violation_type),
+        "description": violation.description,
+        "regulation_reference": violation.regulation_reference,
+        "recommendation": violation.suggested_action or "",
+        "confidence": violation.confidence,
+        "location": violation.location,
+    }
+
+
+async def _persist_analysis_result(
+    *,
+    document_path,
+    result: ComplianceAnalysisResponse,
+) -> None:
+    """Persist analysis results when Supabase is configured."""
+    try:
+        db = get_supabase_service()
+        policy_data = {
+            "id": result.document_id,
+            "filename": document_path.name,
+            "classification": _classification_value(result),
+            "confidence": float(result.confidence),
+            "compliance_score": int(result.metadata.get("compliance_score") or 0),
+            "violations": [_serialize_violation(v) for v in result.violations],
+            "recommendations": result.recommendations,
+            "explanation": result.explanation or "",
+            "rag_metadata": result.metadata or {},
+            "file_path": str(document_path),
+            "file_size_bytes": document_path.stat().st_size,
+        }
+
+        existing_policy = await db.get_policy(result.document_id)
+        if existing_policy:
+            await db.update_policy(result.document_id, policy_data)
+        else:
+            await db.create_policy(policy_data)
+    except Exception as e:
+        logger.warning(f"Could not persist analysis result for {result.document_id}: {e}")
 
 
 def _store_batch_status(batch_id: str, data: dict) -> None:
@@ -74,21 +139,23 @@ async def analyze_document(
     detailed results including violations and recommendations.
     """
     try:
-        # For demo purposes, we'll use a mock document path
-        # In production, this would retrieve the actual document
-        document_path = f"./data/uploads/{request.document_id}.pdf"
+        document_path = _resolve_document_path(request.document_id)
 
         result = await compliance_service.analyze_document(
-            document_path=document_path,
+            document_path=str(document_path),
             document_id=request.document_id,
             analysis_type=request.analysis_type,
             include_explanation=request.include_explanation,
             custom_rules=request.custom_rules
         )
 
+        await _persist_analysis_result(document_path=document_path, result=result)
+
         logger.info(f"Analysis completed for document {request.document_id}")
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Analysis failed for document {request.document_id}: {e}")
         raise HTTPException(
@@ -261,10 +328,16 @@ async def _process_batch_analysis(
         batch_data["status"] = "running"
 
         # Prepare documents for analysis
-        documents = [
-            {"id": doc_id, "path": f"./data/uploads/{doc_id}.pdf"}
-            for doc_id in request.document_ids
-        ]
+        documents = []
+        missing_documents = []
+        document_paths = {}
+        for doc_id in request.document_ids:
+            try:
+                document_path = _resolve_document_path(doc_id)
+                documents.append({"id": doc_id, "path": str(document_path)})
+                document_paths[doc_id] = document_path
+            except HTTPException as e:
+                missing_documents.append({"document_id": doc_id, "error": e.detail})
 
         # Process batch
         results = await compliance_service.analyze_batch(
@@ -274,11 +347,17 @@ async def _process_batch_analysis(
             custom_rules=request.custom_rules
         )
 
+        for result in results:
+            document_path = document_paths.get(result.document_id)
+            if document_path:
+                await _persist_analysis_result(document_path=document_path, result=result)
+
         # Update batch status
         batch_data["results"] = [result.dict() for result in results]
         batch_data["completed_documents"] = len(results)
         batch_data["failed_documents"] = len(request.document_ids) - len(results)
-        batch_data["status"] = "completed"
+        batch_data["errors"] = missing_documents
+        batch_data["status"] = "partial" if batch_data["failed_documents"] else "completed"
 
         logger.info(f"Batch analysis {batch_id} completed successfully")
 

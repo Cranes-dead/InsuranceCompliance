@@ -3,11 +3,11 @@ Chat endpoints for AI-powered policy Q&A.
 Integrates with LLaMA for conversational analysis.
 """
 
+import json
 from datetime import datetime
 from typing import Any, Dict, Optional
-import json
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 

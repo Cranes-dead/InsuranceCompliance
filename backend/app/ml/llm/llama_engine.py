@@ -214,7 +214,7 @@ class GroqProvider(LLMProvider):
                     error_detail = await response.aread()
                     logger.error(f"Groq API error ({response.status_code}): {error_detail}")
                     response.raise_for_status()
-                    
+
                 async for line in response.aiter_lines():
                     line = line.strip()
                     if line.startswith("data: "):

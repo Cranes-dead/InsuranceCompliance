@@ -42,6 +42,11 @@ class LLMProvider(ABC):
         """Generate text from prompt."""
         pass
 
+    @abstractmethod
+    async def stream_generate(self, prompt: str, temperature: float = 0.1):
+        """Yield text chunks from prompt."""
+        pass
+
 
 class OllamaProvider(LLMProvider):
     """Local Ollama provider."""
@@ -90,6 +95,40 @@ class OllamaProvider(LLMProvider):
             )
         except Exception as e:
             logger.error(f"Ollama generation failed: {e}")
+            raise
+
+    async def stream_generate(self, prompt: str, temperature: float = 0.1):
+        """Stream generation using Ollama API."""
+        url = f"{self.base_url}/api/generate"
+        client = self._get_client()
+
+        try:
+            async with client.stream(
+                "POST",
+                url,
+                json={
+                    "model": self.model,
+                    "prompt": prompt,
+                    "temperature": temperature,
+                    "stream": True
+                }
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line:
+                        try:
+                            data = json.loads(line)
+                            if "response" in data:
+                                yield data["response"]
+                        except json.JSONDecodeError:
+                            pass
+        except httpx.ConnectError:
+            raise RuntimeError(
+                f"Cannot connect to Ollama at {self.base_url}. "
+                "Make sure Ollama is running (ollama serve)"
+            )
+        except Exception as e:
+            logger.error(f"Ollama stream failed: {e}")
             raise
 
     async def close(self) -> None:
@@ -154,6 +193,44 @@ class GroqProvider(LLMProvider):
 
         except Exception as e:
             logger.error(f"Groq generation failed: {e}")
+            raise
+
+    async def stream_generate(self, prompt: str, temperature: float = 0.1):
+        """Stream generation using Groq API."""
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        client = self._get_client()
+
+        try:
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+                "max_tokens": self.config.max_tokens,
+                "stream": True
+            }
+
+            async with client.stream("POST", url, json=payload) as response:
+                if response.status_code != 200:
+                    error_detail = await response.aread()
+                    logger.error(f"Groq API error ({response.status_code}): {error_detail}")
+                    response.raise_for_status()
+                    
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            if "choices" in data and len(data["choices"]) > 0:
+                                delta = data["choices"][0].get("delta", {})
+                                if "content" in delta and delta["content"]:
+                                    yield delta["content"]
+                        except json.JSONDecodeError:
+                            pass
+        except Exception as e:
+            logger.error(f"Groq stream failed: {e}")
             raise
 
     async def close(self) -> None:
@@ -356,6 +433,44 @@ class LLaMAComplianceEngine:
         )
 
         return response.strip()
+
+    async def stream_chat(
+        self,
+        user_query: str,
+        analysis_results: Dict[str, Any],
+        chat_history: Optional[List[Dict[str, str]]] = None,
+        policy_excerpt: str = ""
+    ):
+        """Handle conversational Q&A about compliance analysis and yield chunks.
+
+        Args:
+            user_query: User's question
+            analysis_results: Previous analysis results
+            chat_history: Previous conversation messages
+            policy_excerpt: Optional relevant policy text
+
+        Yields:
+            Text chunks
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        chat_history = chat_history or []
+
+        prompt = self.templates.chat_prompt(
+            user_query=user_query,
+            analysis_results=analysis_results,
+            chat_history=chat_history,
+            policy_excerpt=policy_excerpt
+        )
+
+        logger.info(f"💬 Streaming user query: {user_query[:100]}...")
+
+        async for chunk in self.provider.stream_generate(
+            prompt,
+            temperature=0.3
+        ):
+            yield chunk
 
     async def analyze_section(
         self,

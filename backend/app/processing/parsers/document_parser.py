@@ -7,7 +7,10 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import aiofiles
+try:
+    import aiofiles
+except ImportError:
+    aiofiles = None
 
 from ...core import get_logger
 from ...core.exceptions import DocumentProcessingError
@@ -161,13 +164,22 @@ class DocumentParser:
 
     async def _parse_txt(self, file_path: Path) -> str:
         """Parse plain text document."""
+        if aiofiles is not None:
+            try:
+                async with aiofiles.open(file_path, 'r', encoding='utf-8') as file:
+                    return await file.read()
+            except UnicodeDecodeError:
+                # Try with different encoding
+                async with aiofiles.open(file_path, 'r', encoding='latin-1') as file:
+                    return await file.read()
+
+        def _read_text(encoding: str) -> str:
+            return file_path.read_text(encoding=encoding)
+
         try:
-            async with aiofiles.open(file_path, 'r', encoding='utf-8') as file:
-                return await file.read()
+            return await asyncio.to_thread(_read_text, 'utf-8')
         except UnicodeDecodeError:
-            # Try with different encoding
-            async with aiofiles.open(file_path, 'r', encoding='latin-1') as file:
-                return await file.read()
+            return await asyncio.to_thread(_read_text, 'latin-1')
 
     def get_supported_formats(self) -> list:
         """Get list of supported file formats."""

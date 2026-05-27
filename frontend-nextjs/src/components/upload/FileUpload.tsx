@@ -5,7 +5,11 @@ import { useDropzone } from 'react-dropzone';
 import { Upload, File, X, AlertCircle, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import toast, { Toaster } from 'react-hot-toast';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function FileUpload() {
   const router = useRouter();
@@ -34,50 +38,35 @@ export default function FileUpload() {
     setProgress(0);
 
     try {
-      // Show honest progress messaging (no fake progress bar)
       toast.loading('Uploading and analyzing policy...', { id: 'analysis-progress' });
-      setProgress(50); // Show activity, not fake completion
+      setProgress(50);
 
       const response = await api.uploadPolicy(file);
-      
+
       toast.dismiss('analysis-progress');
       setProgress(100);
-
       toast.success('Policy analyzed successfully!');
-      
-      // Clear file input to prevent confusion on browser back
+
       setFile(null);
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      if (fileInput) {
-        fileInput.value = '';
-      }
-      
-      // Redirect to analysis page
+      if (fileInput) fileInput.value = '';
+
       setTimeout(() => {
         router.push(`/analysis/${response.id}`);
       }, 500);
-
-    } catch (error: unknown) {
-      // Clear progress on error
+    } catch (err: unknown) {
+      const error = err as { code?: string; message?: string; response?: { status?: number; data?: { detail?: string; message?: string } } };
       toast.dismiss('analysis-progress');
       setProgress(0);
-      
-      // Provide helpful error messages
-      if ((error as { code?: string }).code === 'ECONNABORTED' || (error as Error).message?.includes('timeout')) {
-        toast.error(
-          'Analysis is taking longer than expected. ' +
-          'Your file may still be processing. Check the policy list in a few minutes.',
-          { duration: 8000 }
-        );
+
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        toast.error('Analysis is taking longer than expected. Check the policy list in a few minutes.', { duration: 8000 });
+      } else if (error.response?.status === 429) {
+        toast.error('Too many requests. Please wait a moment and try again.');
+      } else if (error.response?.status === 400) {
+        toast.error(error.response?.data?.detail || 'Invalid file. Please check file format and size.');
       } else {
-        const axiosErr = error as import('axios').AxiosError<{ detail?: string; message?: string }>;
-        if (axiosErr.response?.status === 429) {
-          toast.error('Too many requests. Please wait a moment and try again.');
-        } else if (axiosErr.response?.status === 400) {
-          toast.error(axiosErr.response?.data?.detail || 'Invalid file. Please check file format and size.');
-        } else {
-          toast.error(axiosErr.response?.data?.message || axiosErr.response?.data?.detail || 'Upload failed. Please try again.');
-        }
+        toast.error(error.response?.data?.message || error.response?.data?.detail || 'Upload failed. Please try again.');
       }
     } finally {
       setUploading(false);
@@ -85,118 +74,114 @@ export default function FileUpload() {
   };
 
   return (
-    <>
-      <Toaster position="top-right" />
-      <div className="max-w-2xl mx-auto">
-        {/* Dropzone */}
-        <div
-          {...getRootProps()}
-          className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
-            isDragActive
-              ? 'border-blue-500 bg-blue-50'
-              : 'border-gray-300 hover:border-gray-400 bg-white'
-          }`}
-        >
-          <input {...getInputProps()} />
-          
-          <Upload className={`w-16 h-16 mx-auto mb-4 ${
-            isDragActive ? 'text-blue-500' : 'text-gray-400'
-          }`} />
-          
-          {isDragActive ? (
-            <p className="text-lg text-blue-600 font-medium">Drop your policy here</p>
-          ) : (
-            <>
-              <p className="text-lg text-gray-700 font-medium mb-2">
-                Drag & drop your insurance policy
-              </p>
-              <p className="text-sm text-gray-500 mb-4">
-                or click to browse files
-              </p>
-              <p className="text-xs text-gray-400">
-                Supports PDF files only • Max 50MB
-              </p>
-            </>
-          )}
-        </div>
+    <div className="max-w-2xl mx-auto space-y-6">
+      {/* Dropzone */}
+      <Card
+        {...getRootProps()}
+        className={`p-12 text-center cursor-pointer transition-all border-dashed border-2 hover:border-primary/40 ${
+          isDragActive
+            ? 'border-primary bg-primary/5'
+            : 'border-border'
+        }`}
+      >
+        <input {...getInputProps()} />
 
-        {/* Selected File */}
-        {file && (
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <File className="w-8 h-8 text-blue-600" />
-              <div>
-                <p className="font-medium text-gray-900">{file.name}</p>
-                <p className="text-sm text-gray-500">
-                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                </p>
-              </div>
-            </div>
-            
-            {!uploading && (
-              <button
-                onClick={() => setFile(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            )}
-          </div>
-        )}
+        <Upload className={`size-12 mx-auto mb-4 ${
+          isDragActive ? 'text-primary' : 'text-muted-foreground/50'
+        }`} />
 
-        {/* Upload Progress */}
-        {uploading && (
-          <div className="mt-6 space-y-3">
-            <div className="flex justify-between text-sm text-gray-600 mb-2">
-              <span className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Analyzing policy with RAG+LLaMA...
-              </span>
-              <span>{progress}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-              <p className="font-medium mb-1">⏱️ This may take 2-3 minutes</p>
-              <p className="text-blue-600">
-                We&apos;re retrieving 112 IRDAI regulations and using AI to analyze your policy for compliance.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Upload Button */}
-        <button
-          onClick={handleUpload}
-          disabled={!file || uploading}
-          className="w-full mt-6 bg-blue-600 text-white py-4 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-        >
-          {uploading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            'Analyze Policy'
-          )}
-        </button>
-
-        {/* Info Alert */}
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-800">
-            <p className="font-medium mb-1">What happens next?</p>
-            <p>
-              Our AI will analyze your policy against 203 IRDAI regulations and provide
-              a detailed compliance report with violations and recommendations.
+        {isDragActive ? (
+          <p className="text-base text-primary font-medium">Drop your policy here</p>
+        ) : (
+          <>
+            <p className="text-base text-foreground font-medium mb-1.5">
+              Drag & drop your insurance policy
             </p>
+            <p className="text-sm text-muted-foreground mb-3">
+              or click to browse files
+            </p>
+            <p className="text-xs text-muted-foreground/70">
+              Supports PDF files only · Max 50MB
+            </p>
+          </>
+        )}
+      </Card>
+
+      {/* Selected File */}
+      {file && (
+        <Card className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-md bg-primary/10 flex items-center justify-center">
+              <File className="size-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{file.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {(file.size / 1024 / 1024).toFixed(2)} MB
+              </p>
+            </div>
           </div>
+
+          {!uploading && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              onClick={() => setFile(null)}
+            >
+              <X className="size-4" />
+            </Button>
+          )}
+        </Card>
+      )}
+
+      {/* Upload Progress */}
+      {uploading && (
+        <div className="space-y-3">
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <Loader2 className="size-3.5 animate-spin" />
+              Analyzing policy with RAG+LLaMA...
+            </span>
+            <span className="tabular-nums">{progress}%</span>
+          </div>
+          <Progress value={progress} className="h-1.5" />
+          <Alert className="border-chart-1/30 bg-chart-1/5">
+            <AlertCircle className="size-4 text-chart-1" />
+            <AlertTitle className="text-sm font-sans">This may take 2-3 minutes</AlertTitle>
+            <AlertDescription className="text-xs">
+              We&apos;re retrieving 112 IRDAI regulations and using AI to analyze your policy for compliance.
+            </AlertDescription>
+          </Alert>
         </div>
-      </div>
-    </>
+      )}
+
+      {/* Upload Button */}
+      <Button
+        onClick={handleUpload}
+        disabled={!file || uploading}
+        className="w-full h-12 text-base"
+        size="lg"
+      >
+        {uploading ? (
+          <>
+            <Loader2 className="size-4 animate-spin mr-2" />
+            Analyzing...
+          </>
+        ) : (
+          'Analyze Policy'
+        )}
+      </Button>
+
+      {/* Info Alert */}
+      <Alert>
+        <AlertCircle className="size-4" />
+        <AlertTitle className="font-sans">What happens next?</AlertTitle>
+        <AlertDescription>
+          Our AI will analyze your policy against 203 IRDAI regulations and provide
+          a detailed compliance report with violations and recommendations.
+        </AlertDescription>
+      </Alert>
+    </div>
   );
 }
